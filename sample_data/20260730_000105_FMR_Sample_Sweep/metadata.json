@@ -1,0 +1,13 @@
+{
+  "experiment_name": "FMR_Sample_Sweep",
+  "sample_name": "YP180829-188-2_test_sample",
+  "sample_description": "Simulated ferromagnetic-resonance style S11/S21 sweep for sample output.",
+  "operator_name": "Simulation",
+  "notes": "Generated automatically by scripts/generate_sample_data.py",
+  "created_at": "2026-07-30T00:01:05",
+  "max_current_a": 2.0,
+  "power_supply_idn": "SIMULATED,PowerSupply,SN-SIM-0001,FW1.0",
+  "vna_idn": "SIMULATED,VectorNetworkAnalyzer,SN-SIM-0002,FW1.0",
+  "finalized_at": "2026-07-30T00:01:13",
+  "total_points_saved": 42
+}

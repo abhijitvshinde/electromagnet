@@ -1,0 +1,27 @@
+{
+  "electromagnet_equipment_number": "YP180829-188-2",
+  "simulation_mode_default": true,
+  "gpib": {
+    "power_supply_address": "GPIB0::5::INSTR",
+    "vna_address": "GPIB0::16::INSTR",
+    "timeout_ms": 5000
+  },
+  "ramping": {
+    "default_current_step_a": 0.05,
+    "default_step_delay_s": 0.2,
+    "default_stabilization_time_s": 1.0,
+    "default_current_tolerance_a": 0.005
+  },
+  "vna_defaults": {
+    "start_freq_hz": 1.0e9,
+    "stop_freq_hz": 3.0e9,
+    "num_points": 401,
+    "source_power_dbm": -10.0,
+    "if_bandwidth_hz": 1000.0,
+    "averaging_enabled": false,
+    "averages": 1,
+    "channel": 1,
+    "trigger_mode": "SINGLE"
+  },
+  "data_output_root": "./experiments"
+}

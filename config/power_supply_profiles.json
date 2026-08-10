@@ -1,0 +1,58 @@
+{
+  "_comment": "SCPI command PLACEHOLDERS ONLY. No instrument-specific commands have been invented. Before using real hardware, replace every 'PLACEHOLDER_...' command string with the exact command from your power supply's programming manual. See docs/SCPI_REPLACEMENT_GUIDE.md.",
+  "active_profile": "GENERIC_PLACEHOLDER",
+  "profiles": {
+    "GENERIC_PLACEHOLDER": {
+      "manufacturer": "REPLACE_ME",
+      "model": "REPLACE_ME",
+      "description": "Placeholder profile. Not tied to any real instrument. Replace all command strings before connecting to hardware.",
+      "termination": "\n",
+      "write_termination": "\n",
+      "read_termination": "\n",
+      "commands": {
+        "identify": "*IDN?",
+        "reset": "*RST",
+        "clear_status": "*CLS",
+        "set_current": "PLACEHOLDER_SET_CURRENT {value:.6f}",
+        "get_current_setpoint": "PLACEHOLDER_GET_CURRENT_SETPOINT?",
+        "get_current_actual": "PLACEHOLDER_GET_CURRENT_ACTUAL?",
+        "set_current_limit": "PLACEHOLDER_SET_CURRENT_LIMIT {value:.6f}",
+        "set_voltage_limit": "PLACEHOLDER_SET_VOLTAGE_LIMIT {value:.6f}",
+        "output_on": "PLACEHOLDER_OUTPUT_ON",
+        "output_off": "PLACEHOLDER_OUTPUT_OFF",
+        "get_output_state": "PLACEHOLDER_GET_OUTPUT_STATE?",
+        "get_error_queue": "SYST:ERR?"
+      },
+      "supports_actual_current_readback": false,
+      "max_voltage_placeholder_v": null,
+      "current_polarity_convention": "REPLACE_ME: document what positive/negative current means physically for this magnet (e.g. positive current -> field along +Z at sample).",
+      "notes": "Fill in manufacturer, model, GPIB address default, and command set from the instrument's SCPI/programming manual. Do not guess commands."
+    },
+    "AGILENT_E3634A": {
+      "manufacturer": "Agilent (now Keysight)",
+      "model": "E3634A",
+      "description": "Single-output DC power supply, dual range (0-25V/7A or 0-50V/4A). Standard Agilent E363xA-series SCPI command set.",
+      "termination": "\n",
+      "write_termination": "\n",
+      "read_termination": "\n",
+      "commands": {
+        "identify": "*IDN?",
+        "reset": "*RST",
+        "clear_status": "*CLS",
+        "set_current": "CURR {value:.6f}",
+        "get_current_setpoint": "CURR?",
+        "get_current_actual": "MEAS:CURR:DC?",
+        "set_current_limit": "CURR {value:.6f}",
+        "set_voltage_limit": "VOLT {value:.6f}",
+        "output_on": "OUTP ON",
+        "output_off": "OUTP OFF",
+        "get_output_state": "OUTP?",
+        "get_error_queue": "SYST:ERR?"
+      },
+      "supports_actual_current_readback": true,
+      "max_voltage_placeholder_v": 50.0,
+      "current_polarity_convention": "IMPORTANT: the E3634A is a single-quadrant (unipolar) supply -- it can only source positive current from + to - and cannot reverse polarity on its own. If your sweep needs negative/bipolar current, an external polarity-reversal relay or H-bridge (or a separate bipolar supply) is required; this application's +/- current model assumes that is handled outside this instrument. Update this note to describe your actual polarity-reversal hardware, if any.",
+      "notes": "CURR programs the current the supply regulates to, ONLY while VOLT is set high enough that the supply is current-limited by the electromagnet coil's resistance (i.e. VOLT >= I_max * R_coil). Set VOLT once (via the Instrument Connection tab's voltage-limit control) to a safe headroom voltage above the maximum I*R you expect for this coil, then only vary CURR per field point -- this is the standard way to drive a resistive/inductive load like a magnet coil from a CV/CC bench supply. Verify against the Agilent E3631A/E3632A/E3633A/E3634A Series Operating and Programming Guide, and confirm VOLTage:PROTection behavior separately if you plan to rely on overvoltage protection."
+    }
+  }
+}

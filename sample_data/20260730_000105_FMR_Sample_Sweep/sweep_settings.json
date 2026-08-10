@@ -1,0 +1,6 @@
+{
+  "mode": "forward_reverse",
+  "start_oe": -250,
+  "stop_oe": 250,
+  "step_oe": 25
+}

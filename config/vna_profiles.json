@@ -1,0 +1,83 @@
+{
+  "_comment": "SCPI command PLACEHOLDERS ONLY. No instrument-specific commands have been invented. Replace every 'PLACEHOLDER_...' command string with the exact command from your VNA's programming manual before connecting to real hardware. See docs/SCPI_REPLACEMENT_GUIDE.md.",
+  "active_profile": "GENERIC_PLACEHOLDER",
+  "profiles": {
+    "GENERIC_PLACEHOLDER": {
+      "manufacturer": "REPLACE_ME",
+      "model": "REPLACE_ME",
+      "description": "Placeholder profile. Not tied to any real instrument. Replace all command strings before connecting to hardware.",
+      "termination": "\n",
+      "write_termination": "\n",
+      "read_termination": "\n",
+      "commands": {
+        "identify": "*IDN?",
+        "reset": "*RST",
+        "clear_status": "*CLS",
+        "select_channel": "PLACEHOLDER_SELECT_CHANNEL {channel}",
+        "set_start_freq": "PLACEHOLDER_SET_START_FREQ {value_hz:.1f}",
+        "set_stop_freq": "PLACEHOLDER_SET_STOP_FREQ {value_hz:.1f}",
+        "set_num_points": "PLACEHOLDER_SET_NUM_POINTS {points}",
+        "set_source_power": "PLACEHOLDER_SET_SOURCE_POWER {value_dbm:.2f}",
+        "set_if_bandwidth": "PLACEHOLDER_SET_IFBW {value_hz:.1f}",
+        "set_sweep_time": "PLACEHOLDER_SET_SWEEP_TIME {value_s:.6f}",
+        "set_averaging_state": "PLACEHOLDER_SET_AVG_STATE {state}",
+        "set_averaging_count": "PLACEHOLDER_SET_AVG_COUNT {count}",
+        "clear_averaging": "PLACEHOLDER_CLEAR_AVG",
+        "set_trigger_mode": "PLACEHOLDER_SET_TRIGGER_MODE {mode}",
+        "trigger_single_sweep": "PLACEHOLDER_TRIGGER_SWEEP",
+        "query_sweep_complete": "PLACEHOLDER_QUERY_OPC?",
+        "select_measurement_s11": "PLACEHOLDER_SELECT_MEAS S11",
+        "select_measurement_s21": "PLACEHOLDER_SELECT_MEAS S21",
+        "get_sdata_s11": "PLACEHOLDER_GET_SDATA S11",
+        "get_sdata_s21": "PLACEHOLDER_GET_SDATA S21",
+        "get_frequency_data": "PLACEHOLDER_GET_FREQ_DATA",
+        "get_error_queue": "SYST:ERR?"
+      },
+      "data_format": {
+        "type": "ASCII_OR_BINARY_PLACEHOLDER",
+        "notes": "Document whether the instrument returns comma-separated real/imag pairs (ASCII) or an IEEE-488.2 definite-length binary block, and whether byte order is big-endian or little-endian. Update the parsing logic in src/drivers/vna.py accordingly."
+      },
+      "supports_binary_transfer": false,
+      "notes": "Fill in manufacturer, model, GPIB address default, and command set from the instrument's SCPI/programming manual. Do not guess commands."
+    },
+    "KEYSIGHT_PNA_X_N5242B": {
+      "manufacturer": "Keysight (Agilent)",
+      "model": "N5242B PNA-X, 10 MHz - 26.5 GHz",
+      "description": "Standard Keysight PNA Series SCPI command set. Creates/selects measurements named 'MeasS11'/'MeasS21' on the active channel and forces ASCII data transfer so this application's existing ASCII parser works unchanged.",
+      "termination": "\n",
+      "write_termination": "\n",
+      "read_termination": "\n",
+      "commands": {
+        "identify": "*IDN?",
+        "reset": "*RST",
+        "clear_status": "*CLS",
+        "select_channel": "FORM:DATA ASCII,0;:SENS{channel}:SWE:MODE HOLD",
+        "set_start_freq": "SENS{channel}:FREQ:STAR {value_hz:.1f}",
+        "set_stop_freq": "SENS{channel}:FREQ:STOP {value_hz:.1f}",
+        "set_num_points": "SENS{channel}:SWE:POIN {points}",
+        "set_source_power": "SOUR{channel}:POW {value_dbm:.2f}",
+        "set_if_bandwidth": "SENS{channel}:BWID {value_hz:.1f}",
+        "set_sweep_time": "SENS{channel}:SWE:TIME {value_s:.6f}",
+        "set_averaging_state": "SENS{channel}:AVER {state}",
+        "set_averaging_count": "SENS{channel}:AVER:COUN {count}",
+        "clear_averaging": "SENS{channel}:AVER:CLE",
+        "set_trigger_mode": "TRIG:SOUR {mode}",
+        "trigger_single_sweep": "SENS{channel}:SWE:MODE SING",
+        "query_sweep_complete": "*OPC?",
+        "select_measurement_s11": "CALC{channel}:PAR:DEF:EXT 'MeasS11','S11';CALC{channel}:PAR:SEL 'MeasS11'",
+        "select_measurement_s21": "CALC{channel}:PAR:DEF:EXT 'MeasS21','S21';CALC{channel}:PAR:SEL 'MeasS21'",
+        "get_sdata_s11": "CALC{channel}:DATA? SDATA",
+        "get_sdata_s21": "CALC{channel}:DATA? SDATA",
+        "get_frequency_data": "CALC{channel}:X?",
+        "get_error_queue": "SYST:ERR?"
+      },
+      "data_format": {
+        "type": "ASCII",
+        "notes": "select_channel forces 'FORM:DATA ASCII,0' so CALC:DATA?/CALC:X? return comma-separated ASCII instead of the PNA's default IEEE-488.2 binary block. select_measurement_s11/s21 (re)define a measurement named MeasS11/MeasS21 with CALC:PAR:DEF:EXT every time before selecting it; on some firmware revisions redefining an already-existing measurement name raises a duplicate-name SCPI error instead of silently succeeding. If SYST:ERR? reports that, either create each measurement once manually (front panel, or a one-off SCPI command) and change these two commands to just the CALC:PAR:SEL half, or replace PAR:DEF:EXT with PAR:MOD:EXT (modify-or-create semantics)."
+      },
+      "supports_binary_transfer": true,
+      "current_polarity_convention": "Not applicable -- this is the VNA profile.",
+      "notes": "trigger_single_sweep uses the real, standard SENS:SWE:MODE SINGle; query_sweep_complete uses *OPC?, which blocks until the triggered sweep actually finishes and then returns 1 -- set the GPIB/VISA timeout comfortably longer than one sweep's duration (IFBW, points, and averaging all affect this). set_trigger_mode maps to TRIG:SOUR (INTernal|EXTernal|MANual|BUS); it is not required for this application's software-triggered single-sweep-per-point workflow, since trigger_single_sweep always forces SWE:MODE SINGle regardless of trigger source. Verify every command here against the N5242B's own SCPI Command Reference (Help menu on the instrument, or Keysight's PNA Series Programming Guide online) before an unattended run -- PNA-X firmware revisions vary slightly in the measurement-creation command set (legacy CALC:PAR vs newer CALC:MEAS interface)."
+    }
+  }
+}

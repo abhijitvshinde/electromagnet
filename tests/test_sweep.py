@@ -61,6 +61,16 @@ def test_build_validation_table_flags_out_of_calibration_range():
     assert any(not r.within_calibration_range for r in rows)
 
 
+def test_build_validation_table_allows_extrapolation_when_enabled():
+    cal, sm = _calibrated_manager(max_current=2.0)
+    pairs = generate_field_values(0, 550, 550, mode="forward")  # 550 Oe is 10% beyond the 500 Oe calibrated max
+    rows = build_validation_table(pairs, cal, sm, allow_extrapolation=True, extrapolation_margin_fraction=0.2)
+    summary = summarize_sequence(rows)
+    assert summary.all_valid
+    assert any(r.extrapolated for r in rows)
+    assert not any(r.within_calibration_range and r.extrapolated for r in rows)
+
+
 def test_build_validation_table_flags_current_above_max():
     cal, sm = _calibrated_manager(max_current=0.2)  # max current well below what 500 Oe needs
     pairs = generate_field_values(0, 400, 200, mode="forward")

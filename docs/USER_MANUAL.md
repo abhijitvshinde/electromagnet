@@ -66,7 +66,14 @@ sweep time, averaging, channel, trigger mode, and which S-parameters to
 measure. **Apply Configuration to VNA** pushes it to the connected
 instrument (or just stores it if not yet connected).
 
-## 6. Live Measurement
+## 6. Data & Experiment
+
+Enter experiment/sample/operator metadata and an output folder, then
+**Create Experiment Folder** -- do this before starting a measurement.
+Generates S11/S21 color maps (magnitude vs. frequency and field) once
+data exists.
+
+## 7. Live Measurement
 
 The main screen: connection status, maximum current, present
 current/field, progress, elapsed time, and the live S11/S21 plots
@@ -77,13 +84,6 @@ and asks for confirmation before it enables the output and begins. Data
 for every field point is saved to disk the instant it is measured.
 **Pause / Resume / Abort / Ramp to Zero / EMERGENCY STOP** are always
 available during a run.
-
-## 7. Data & Experiment
-
-Enter experiment/sample/operator metadata and an output folder, then
-**Create Experiment Folder** -- do this before starting a measurement.
-Generates S11/S21 color maps (magnitude vs. frequency and field) once
-data exists.
 
 ## 8. Event Log
 

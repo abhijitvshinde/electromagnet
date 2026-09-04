@@ -122,3 +122,43 @@ def default_power_supply_profile() -> InstrumentProfile:
 def default_vna_profile() -> InstrumentProfile:
     name = active_profile_name(CONFIG_DIR / "vna_profiles.json")
     return vna_profiles()[name]
+
+
+STATE_DIR = PROJECT_ROOT / "state"
+_USER_STATE_PATH = STATE_DIR / "user_state.json"
+
+
+@dataclass
+class UserState:
+    """Small local preferences that are safe to remember across app
+    restarts -- physical/setup values that don't change between sessions.
+
+    Deliberately excludes anything safety-gated (the mandatory max-current
+    limit, in particular): that is re-confirmed by the user every session
+    on purpose, not silently restored, so it stays out of this file.
+    """
+
+    coil_resistance_ohms: float = 0.0
+    voltage_margin_percent: float = 20.0
+
+    @classmethod
+    def load(cls) -> "UserState":
+        try:
+            data = _load_json(_USER_STATE_PATH)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return cls()
+        return cls(
+            coil_resistance_ohms=float(data.get("coil_resistance_ohms", 0.0)),
+            voltage_margin_percent=float(data.get("voltage_margin_percent", 20.0)),
+        )
+
+    def save(self) -> None:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        with open(_USER_STATE_PATH, "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "coil_resistance_ohms": self.coil_resistance_ohms,
+                    "voltage_margin_percent": self.voltage_margin_percent,
+                },
+                f, indent=2,
+            )

@@ -161,6 +161,13 @@ class MeasurementController(QThread):
                 s11 = self.vna.get_s_parameter("S11") if self.measure_s11 else None
                 s21 = self.vna.get_s_parameter("S21") if self.measure_s21 else None
                 actual_current = self.power_supply.get_actual_current()
+                # Read for display/logging only -- this is the instrument's
+                # real metered output voltage (MEAS:VOLT:DC?), not any
+                # setpoint/ceiling. Read here (inside this thread, in
+                # sequence with the other GPIB calls for this point) rather
+                # than from the GUI thread, to avoid concurrent access to
+                # the same VISA session.
+                actual_voltage = self.power_supply.get_actual_voltage()
 
                 result = MeasurementPointResult(
                     index=i,
@@ -172,6 +179,7 @@ class MeasurementController(QThread):
                     timestamp=datetime.now().isoformat(timespec="seconds"),
                     s11=s11,
                     s21=s21,
+                    actual_voltage_v=actual_voltage,
                 )
                 self.data_manager.save_point(result)
                 self.point_completed.emit(result)

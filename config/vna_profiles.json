@@ -61,11 +61,13 @@
         "set_averaging_state": "SENS{channel}:AVER {state}",
         "set_averaging_count": "SENS{channel}:AVER:COUN {count}",
         "clear_averaging": "SENS{channel}:AVER:CLE",
-        "set_trigger_mode": "TRIG:SOUR {mode}",
+        "set_trigger_mode": "TRIG:SOUR IMMEDIATE",
         "trigger_single_sweep": "SENS{channel}:SWE:MODE SING",
         "query_sweep_complete": "*OPC?",
-        "select_measurement_s11": "CALC{channel}:PAR:DEF:EXT 'MeasS11','S11';CALC{channel}:PAR:SEL 'MeasS11'",
-        "select_measurement_s21": "CALC{channel}:PAR:DEF:EXT 'MeasS21','S21';CALC{channel}:PAR:SEL 'MeasS21'",
+        "create_measurement_s11": "CALC{channel}:PAR:DEF:EXT 'MeasS11','S11'",
+        "create_measurement_s21": "CALC{channel}:PAR:DEF:EXT 'MeasS21','S21'",
+        "select_measurement_s11": "CALC{channel}:PAR:SEL 'MeasS11'",
+        "select_measurement_s21": "CALC{channel}:PAR:SEL 'MeasS21'",
         "get_sdata_s11": "CALC{channel}:DATA? SDATA",
         "get_sdata_s21": "CALC{channel}:DATA? SDATA",
         "get_frequency_data": "CALC{channel}:X?",
@@ -73,11 +75,11 @@
       },
       "data_format": {
         "type": "ASCII",
-        "notes": "select_channel forces 'FORM:DATA ASCII,0' so CALC:DATA?/CALC:X? return comma-separated ASCII instead of the PNA's default IEEE-488.2 binary block. select_measurement_s11/s21 (re)define a measurement named MeasS11/MeasS21 with CALC:PAR:DEF:EXT every time before selecting it; on some firmware revisions redefining an already-existing measurement name raises a duplicate-name SCPI error instead of silently succeeding. If SYST:ERR? reports that, either create each measurement once manually (front panel, or a one-off SCPI command) and change these two commands to just the CALC:PAR:SEL half, or replace PAR:DEF:EXT with PAR:MOD:EXT (modify-or-create semantics)."
+        "notes": "select_channel forces 'FORM:DATA ASCII,0' so CALC:DATA?/CALC:X? return comma-separated ASCII instead of the PNA's default IEEE-488.2 binary block. create_measurement_s11/s21 define MeasS11/MeasS21 with CALC:PAR:DEF:EXT once per configure() call. Confirmed on real hardware (MY48220566, firmware A.16.20.04): if MeasS11/MeasS21 already exist from a previous configure() in the same instrument session, this raises SCPI error +104 'Duplicate measurement name' -- this is HARMLESS and expected on repeat configure() calls; the existing measurement is unaffected and select_measurement_s11/s21 (CALC:PAR:SEL, used on every S-parameter fetch) still selects it correctly. Also confirmed on this hardware: *OPC? returns '+1' (with an explicit sign), not bare '1' -- src/drivers/vna.py strips a leading '+' before comparing. Also confirmed: triggering a sweep on a channel with no measurement ever defined on it does not report completion via *OPC? at all (hangs indefinitely with no SCPI error) -- this is why measurement creation happens in configure(), before any sweep is ever triggered."
       },
       "supports_binary_transfer": true,
       "current_polarity_convention": "Not applicable -- this is the VNA profile.",
-      "notes": "trigger_single_sweep uses the real, standard SENS:SWE:MODE SINGle; query_sweep_complete uses *OPC?, which blocks until the triggered sweep actually finishes and then returns 1 -- set the GPIB/VISA timeout comfortably longer than one sweep's duration (IFBW, points, and averaging all affect this). set_trigger_mode maps to TRIG:SOUR (INTernal|EXTernal|MANual|BUS); it is not required for this application's software-triggered single-sweep-per-point workflow, since trigger_single_sweep always forces SWE:MODE SINGle regardless of trigger source. Verify every command here against the N5242B's own SCPI Command Reference (Help menu on the instrument, or Keysight's PNA Series Programming Guide online) before an unattended run -- PNA-X firmware revisions vary slightly in the measurement-creation command set (legacy CALC:PAR vs newer CALC:MEAS interface)."
+      "notes": "trigger_single_sweep uses the real, standard SENS:SWE:MODE SINGle; query_sweep_complete uses *OPC?, which blocks until the triggered sweep actually finishes and then returns 1 -- set the GPIB/VISA timeout comfortably longer than one sweep's duration (IFBW, points, and averaging all affect this). set_trigger_mode is hard-coded to 'TRIG:SOUR IMMEDIATE' regardless of the GUI's trigger-mode selection, confirmed against real hardware (MY48220566, firmware A.16.20.04): sending the GUI's generic mode string verbatim (e.g. 'SINGLE') was rejected by the instrument with SCPI error -224 'Illegal parameter value', which silently left the trigger source on its previous value and caused SENS:SWE:MODE SING to hang waiting for a trigger that never arrived. Since this application always explicitly triggers each sweep itself over GPIB, IMMEDIATE (internal/free-run) is the only trigger source this workflow needs -- the GUI's Trigger Mode dropdown has no effect on this instrument's actual behavior. Verify every other command here against the N5242B's own SCPI Command Reference (Help menu on the instrument, or Keysight's PNA Series Programming Guide online) before an unattended run -- PNA-X firmware revisions vary slightly in the measurement-creation command set (legacy CALC:PAR vs newer CALC:MEAS interface)."
     }
   }
 }

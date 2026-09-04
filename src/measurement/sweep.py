@@ -26,10 +26,15 @@ class SweepPoint:
     within_calibration_range: bool
     within_current_limit: bool
     status: str
+    extrapolated: bool = False
 
     @property
     def is_valid(self) -> bool:
-        return self.within_calibration_range and self.within_current_limit and self.current_a is not None
+        return (
+            (self.within_calibration_range or self.extrapolated)
+            and self.within_current_limit
+            and self.current_a is not None
+        )
 
 
 def generate_field_values(
@@ -73,11 +78,20 @@ def build_validation_table(
     safety_manager: SafetyManager,
     calibration_direction_mode: str = "auto",
     interpolation_method: str = "linear",
+    allow_extrapolation: bool = False,
+    extrapolation_margin_fraction: float = 0.2,
 ) -> list[SweepPoint]:
     """Convert every requested field to current and validate it.
 
     Never raises: invalid points are recorded in the table with a status
     string so the GUI can display them and keep Start Measurement disabled.
+
+    By default, a field outside the calibrated range is rejected. Pass
+    ``allow_extrapolation=True`` to instead compute it via a curve fit
+    beyond the measured range (still capped at
+    ``extrapolation_margin_fraction`` of the calibrated span, and still
+    subject to the max-current safety limit) -- such points are flagged
+    with :attr:`SweepPoint.extrapolated`.
     """
     rows: list[SweepPoint] = []
     for i, (field_oe, sweep_dir) in enumerate(field_direction_pairs):
@@ -86,9 +100,12 @@ def build_validation_table(
             calib_dir = {"forward": "increasing", "reverse": "decreasing"}.get(sweep_dir, "all")
 
         ok, current, status = calibration_manager.validate_field_request(
-            field_oe, direction=calib_dir, method=interpolation_method
+            field_oe, direction=calib_dir, method=interpolation_method,
+            allow_extrapolation=allow_extrapolation,
+            extrapolation_margin_fraction=extrapolation_margin_fraction,
         )
-        within_range = "OUTSIDE CALIBRATION RANGE" not in status
+        extrapolated = ok and "EXTRAPOLATED" in status
+        within_range = "OUTSIDE CALIBRATION RANGE" not in status and not extrapolated
         within_limit = "EXCEEDS MAX CURRENT" not in status
 
         rows.append(
@@ -100,6 +117,7 @@ def build_validation_table(
                 within_calibration_range=within_range,
                 within_current_limit=within_limit,
                 status=status,
+                extrapolated=extrapolated,
             )
         )
     return rows

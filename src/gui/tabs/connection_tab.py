@@ -102,31 +102,31 @@ class ConnectionTab(QWidget):
         idn_label.setWordWrap(True)
         grid.addWidget(idn_label, 3, 0, 1, 4)
 
-        voltage_limit_spin = None
-        voltage_limit_btn = None
         if is_power_supply:
-            grid.addWidget(QLabel("Voltage limit / compliance (V):"), 4, 0)
-            voltage_limit_spin = QDoubleSpinBox()
-            voltage_limit_spin.setRange(0.0, 1000.0)
-            voltage_limit_spin.setDecimals(3)
-            grid.addWidget(voltage_limit_spin, 4, 1)
-            voltage_limit_btn = QPushButton("Set Voltage Limit")
-            voltage_limit_btn.setEnabled(False)
-            voltage_limit_btn.setToolTip(
-                "For a CV supply with a current setpoint (e.g. E3634A), the voltage "
-                "limit must be set high enough that the current setpoint is actually "
-                "reachable given the electromagnet coil's resistance (V >= I_max * R_coil)."
+            clear_protection_btn = QPushButton("Clear Protection Trip")
+            clear_protection_btn.setEnabled(False)
+            clear_protection_btn.setToolTip(
+                "Some power supplies (e.g. the E3634A) latch the output off when an "
+                "overvoltage/overcurrent protection circuit trips -- Output On alone will "
+                "not restore it. Use this if the output stays off with no other explanation."
             )
-            grid.addWidget(voltage_limit_btn, 4, 2, 1, 2)
+            grid.addWidget(clear_protection_btn, 4, 0, 1, 4)
 
-            def do_set_voltage_limit() -> None:
+            def do_clear_protection() -> None:
                 if self.ctx.power_supply is not None:
                     try:
-                        self.ctx.power_supply.set_voltage_limit(voltage_limit_spin.value())
+                        self.ctx.power_supply.clear_protection_trips()
+                        QMessageBox.information(
+                            self, "Protection Cleared",
+                            "Sent the clear command(s) for overvoltage/overcurrent protection "
+                            "(if supported by this profile). Try enabling the output again.",
+                        )
                     except InstrumentCommunicationError as exc:
-                        QMessageBox.critical(self, "Voltage Limit Failed", str(exc))
+                        QMessageBox.critical(self, "Clear Protection Failed", str(exc))
 
-            voltage_limit_btn.clicked.connect(do_set_voltage_limit)
+            clear_protection_btn.clicked.connect(do_clear_protection)
+        else:
+            clear_protection_btn = None
 
         def do_connect() -> None:
             profile = profiles[profile_combo.currentText()]
@@ -160,12 +160,57 @@ class ConnectionTab(QWidget):
                 connect_btn.setEnabled(False)
                 disconnect_btn.setEnabled(True)
                 test_btn.setEnabled(True)
+                # Lock these: changing them while connected has NO effect on the
+                # already-built driver (its profile/transport are fixed at connect
+                # time), so leaving them editable invites exactly the confusing bug
+                # where the dropdown shows one profile while a different one is
+                # actually in use. Disconnect and reconnect to apply a change.
+                address_edit.setEnabled(False)
+                timeout_spin.setEnabled(False)
+                profile_combo.setEnabled(False)
                 if is_power_supply:
-                    voltage_limit_btn.setEnabled(True)
+                    clear_protection_btn.setEnabled(True)
                     if self.ctx.safety_manager.is_configured:
                         # Best-effort: mirror the mandatory software limit onto the
                         # instrument's own hardware current limit, when supported.
                         driver.set_hardware_current_limit(self.ctx.safety_manager.max_current)
+                    if self.ctx.voltage_monitoring_threshold is not None:
+                        # Re-apply the Safety tab's software monitoring threshold to
+                        # this newly-connected driver instance (never sent to the
+                        # instrument -- see VoltageMonitor).
+                        driver.set_voltage_monitoring_threshold(self.ctx.voltage_monitoring_threshold)
+                        # Also (re)apply it as the instrument's actual
+                        # compliance-voltage setpoint (plain VOLT) -- NOT the OVP
+                        # protection circuit (VOLT:PROT), which this app still
+                        # never touches automatically. This supply is CV/CC: a
+                        # CURR command has no physical effect at all unless VOLT
+                        # is set high enough for the supply to regulate on
+                        # current -- so the power supply can act as a genuine
+                        # current source (with the operating voltage floating
+                        # below this ceiling per V = I*R_coil) instead of
+                        # needing manual front-panel setup every time.
+                        # CONFIRMED on real hardware: connecting a new GPIB
+                        # session resets this instrument's VOLT setpoint to ~0V,
+                        # so this must be reapplied on every connect, not just
+                        # once. Skip (with a warning) rather than push a
+                        # worthless 0V ceiling if the threshold hasn't actually
+                        # been calculated yet (e.g. Coil resistance still 0).
+                        # Best-effort otherwise: the connection itself should
+                        # still succeed even if this particular write fails.
+                        if self.ctx.voltage_monitoring_threshold > 0:
+                            try:
+                                driver.set_voltage_limit(self.ctx.voltage_monitoring_threshold)
+                            except InstrumentCommunicationError as exc:
+                                self.ctx.logger.warning(
+                                    f"Could not apply compliance-voltage setpoint on connect: {exc}"
+                                )
+                        else:
+                            self.ctx.logger.warning(
+                                "Voltage monitoring threshold is 0 -- not pushing it as a "
+                                "compliance-voltage setpoint. Check Coil resistance and Max "
+                                "Current on the Safety tab, then use 'Set Monitoring "
+                                "Threshold & Compliance Voltage' again."
+                            )
                 self.connections_changed.emit()
             except InstrumentCommunicationError as exc:
                 QMessageBox.critical(self, "Connection Failed", str(exc))
@@ -184,8 +229,11 @@ class ConnectionTab(QWidget):
             connect_btn.setEnabled(True)
             disconnect_btn.setEnabled(False)
             test_btn.setEnabled(False)
-            if is_power_supply and voltage_limit_btn is not None:
-                voltage_limit_btn.setEnabled(False)
+            address_edit.setEnabled(True)
+            timeout_spin.setEnabled(True)
+            profile_combo.setEnabled(True)
+            if is_power_supply:
+                clear_protection_btn.setEnabled(False)
             self.connections_changed.emit()
 
         def do_test() -> None:

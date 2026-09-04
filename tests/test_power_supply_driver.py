@@ -1,6 +1,7 @@
 import pytest
 
-from src.config.app_config import default_power_supply_profile
+from src.config.app_config import default_power_supply_profile, power_supply_profiles
+from src.drivers.base_instrument import InstrumentStatus
 from src.drivers.power_supply import PowerSupplyController
 from src.drivers.simulation import SimulatedPowerSupplyTransport, SimulationEngine
 from src.safety.safety_manager import SafetyManager, SafetyViolationError
@@ -52,3 +53,24 @@ def test_emergency_stop_blocks_further_current_commands():
     sm.trigger_emergency_stop()
     with pytest.raises(SafetyViolationError):
         driver.set_current(0.5, context="test")
+
+
+def test_optional_hardware_limit_failure_does_not_corrupt_connected_status():
+    """Regression test: a real command profile's set_current_limit command
+    won't be understood by the plain simulated transport (which only knows
+    the GENERIC_PLACEHOLDER vocabulary). That failure is best-effort and
+    must not leave the driver stuck reporting Error status when the
+    connection itself is actually fine."""
+    profile = power_supply_profiles()["HP_AGILENT_E3631A_P6V"]
+    engine = SimulationEngine(comm_delay_s=0.0)
+    transport = SimulatedPowerSupplyTransport(engine)
+    sm = SafetyManager()
+    sm.set_max_current(1.5)
+    driver = PowerSupplyController(profile, transport, sm)
+    driver.open_connection()
+    assert driver.status == InstrumentStatus.CONNECTED
+
+    driver.set_hardware_current_limit(1.5)  # command not understood by this transport
+
+    assert driver.status == InstrumentStatus.CONNECTED
+    assert driver.is_connected

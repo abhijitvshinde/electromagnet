@@ -31,7 +31,7 @@
     "AGILENT_E3634A": {
       "manufacturer": "Agilent (now Keysight)",
       "model": "E3634A",
-      "description": "Single-output DC power supply, dual range (0-25V/7A or 0-50V/4A). Standard Agilent E363xA-series SCPI command set.",
+      "description": "Single-output DC power supply, dual range (0-25V/7A or 0-50V/4A). Standard Agilent E363xA-series SCPI command set. CONFIRMED on real hardware: this is the electromagnet's actual power supply on this setup, IDN 'HEWLETT-PACKARD,E3634A,0,1.7-5.0-1.0' at GPIB address 3 (GPIB0::3::INSTR) -- current, voltage limit, and output enable/disable all verified working with no SCPI errors and a physical current change confirmed on a multimeter.",
       "termination": "\n",
       "write_termination": "\n",
       "read_termination": "\n",
@@ -42,17 +42,47 @@
         "set_current": "CURR {value:.6f}",
         "get_current_setpoint": "CURR?",
         "get_current_actual": "MEAS:CURR:DC?",
-        "set_current_limit": "CURR {value:.6f}",
+        "get_actual_voltage": "MEAS:VOLT:DC?",
+        "set_current_limit": "CURR:PROT {value:.6f};CURR:PROT:STAT ON",
         "set_voltage_limit": "VOLT {value:.6f}",
+        "set_overvoltage_protection_level": "VOLT:PROT {value:.6f};VOLT:PROT:STAT ON",
+        "output_on": "OUTP ON",
+        "output_off": "OUTP OFF",
+        "get_output_state": "OUTP?",
+        "get_error_queue": "SYST:ERR?",
+        "clear_overvoltage_protection": "VOLT:PROT:CLE",
+        "clear_overcurrent_protection": "CURR:PROT:CLE"
+      },
+      "supports_actual_current_readback": true,
+      "max_voltage_placeholder_v": 50.0,
+      "current_polarity_convention": "IMPORTANT: the E3634A is a single-quadrant (unipolar) supply -- it can only source positive current from + to - and cannot reverse polarity on its own. If your sweep needs negative/bipolar current, an external polarity-reversal relay or H-bridge (or a separate bipolar supply) is required; this application's +/- current model assumes that is handled outside this instrument. Update this note to describe your actual polarity-reversal hardware, if any.",
+      "notes": "CURR programs the current the supply regulates to, ONLY while VOLT is set high enough that the supply is current-limited by the electromagnet coil's resistance (i.e. VOLT >= I_max * R_coil) -- set VOLT generously (with margin) to cover your full intended current range, and the ACTUAL voltage will then be decided by the supply itself via Ohm's law (V = I * R_coil) for whatever current is commanded; VOLT is a compliance ceiling, not the operating voltage. By deliberate design choice, this application does NOT push a calculated safety value into the instrument's own OVP circuit (VOLT:PROT) -- instead the Connection tab's 'Calculate from Max Current' result is kept as a software-only monitoring threshold, and the app polls get_actual_voltage (MEAS:VOLT:DC?) and triggers an emergency stop itself if the real output voltage ever exceeds it, rather than relying on the instrument's own OVP trip. set_current_limit configures the instrument's own overcurrent-protection (OCP) trip level (CURR:PROT) and enables it -- IMPORTANT: this key used to be wrongly mapped to plain CURR (duplicating set_current, and never actually touching OCP), which meant a stale/low OCP trip level from an earlier session kept silently tripping and zeroing the output on any real test current. Now fixed to CURR:PROT so it genuinely mirrors the app's software max-current limit as a hardware backstop. CONFIRMED on real hardware: if OVP or OCP trips (output shows 'OFF' with the OVP or OCP annunciator blinking, or output silently drops to 0A shortly after being set with no SCPI error queued), OUTP ON alone will NOT restore it -- use the app's Clear Protection Trip button (VOLT:PROT:CLE / CURR:PROT:CLE) first, per the Agilent E3633A/E3634A User's Guide chapter 3. **CONFIRMED on real hardware (reproduced with the app closed and only a standalone script connecting, ruling out a session-contention bug): every time a NEW GPIB session takes control of this instrument, its voltage setpoint resets to ~0V** (and the voltage range may reset to the low 25V/7A range) -- this matches the instrument's own documented power-on/reset behavior and is very likely an intentional safety design (never inherit an unknown setpoint from a fresh remote-control session), not an application bug. Practical implication: after every (re)connect to this instrument -- whether from this app or any script -- you MUST re-set the front-panel voltage range and setpoint again before commanding current, and should avoid unnecessary disconnect/reconnect cycles during a working session since each one requires redoing that front-panel setup."
+    },
+    "HP_AGILENT_E3631A_P6V": {
+      "manufacturer": "Hewlett-Packard / Agilent (now Keysight)",
+      "model": "E3631A",
+      "description": "Triple-output DC power supply (+6V/5A, +25V/1A, -25V/1A). This profile is fixed to the +6V/5A output, confirmed via *IDN? (hewlett-packard,E3631A,0,2.1-5.0-1.0) at GPIB address 2 on this setup. Every current/voltage command re-selects the P6V output first (INST:SEL) so it stays correct even if something else on the bus changed the active output. IMPORTANT: this is a SECOND power supply that happens to share the same GPIB bus -- it is NOT wired to the electromagnet on this setup. The electromagnet's actual supply is the AGILENT_E3634A profile at GPIB address 3. Do not select this profile/address for controlling the magnet.",
+      "termination": "\n",
+      "write_termination": "\n",
+      "read_termination": "\n",
+      "commands": {
+        "identify": "*IDN?",
+        "reset": "*RST",
+        "clear_status": "*CLS",
+        "set_current": "INST:SEL P6V;CURR {value:.6f}",
+        "get_current_setpoint": "INST:SEL P6V;CURR?",
+        "get_current_actual": "INST:SEL P6V;MEAS:CURR:DC?",
+        "set_current_limit": "INST:SEL P6V;CURR {value:.6f}",
+        "set_voltage_limit": "INST:SEL P6V;VOLT {value:.6f}",
         "output_on": "OUTP ON",
         "output_off": "OUTP OFF",
         "get_output_state": "OUTP?",
         "get_error_queue": "SYST:ERR?"
       },
       "supports_actual_current_readback": true,
-      "max_voltage_placeholder_v": 50.0,
-      "current_polarity_convention": "IMPORTANT: the E3634A is a single-quadrant (unipolar) supply -- it can only source positive current from + to - and cannot reverse polarity on its own. If your sweep needs negative/bipolar current, an external polarity-reversal relay or H-bridge (or a separate bipolar supply) is required; this application's +/- current model assumes that is handled outside this instrument. Update this note to describe your actual polarity-reversal hardware, if any.",
-      "notes": "CURR programs the current the supply regulates to, ONLY while VOLT is set high enough that the supply is current-limited by the electromagnet coil's resistance (i.e. VOLT >= I_max * R_coil). Set VOLT once (via the Instrument Connection tab's voltage-limit control) to a safe headroom voltage above the maximum I*R you expect for this coil, then only vary CURR per field point -- this is the standard way to drive a resistive/inductive load like a magnet coil from a CV/CC bench supply. Verify against the Agilent E3631A/E3632A/E3633A/E3634A Series Operating and Programming Guide, and confirm VOLTage:PROTection behavior separately if you plan to rely on overvoltage protection."
+      "max_voltage_placeholder_v": 6.0,
+      "current_polarity_convention": "IMPORTANT: the E3631A's P6V output is single-quadrant (unipolar) -- it can only source positive current and cannot reverse polarity on its own. A negative/bipolar sweep needs external polarity-reversal hardware (relay/H-bridge) between this output and the coil; this application's +/- current model assumes that is handled externally. Note also that OUTP ON/OFF on the E3631A is GLOBAL -- it enables/disables all three outputs (P6V, P25V, N25V) together, not just P6V, so make sure nothing else is wired to the other two outputs before relying on output-disable as a safety action.",
+      "notes": "Max current on this output is hardware-limited to 5A by the instrument itself regardless of any CURR value requested. VOLT on this output should be set high enough that CURR is not voltage-starved for your coil (VOLT >= I_max * R_coil, capped at 6V max by the output's own range) -- if your coil needs more than ~6V at your target current, use the +25V/1A output instead (profile would need INST:SEL P25V and a 1A ceiling). Verify against the Agilent/HP E3631A Operating and Programming Guide before an unattended run. GPIB address on this setup was found to be 2 (GPIB0::2::INSTR). Kept here for reference/testing this second instrument, but it is not part of the electromagnet control setup."
     }
   }
 }

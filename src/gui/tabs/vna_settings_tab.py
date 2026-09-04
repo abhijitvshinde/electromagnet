@@ -9,6 +9,40 @@ from PySide6.QtWidgets import (
 from src.drivers.vna import VNASweepConfig
 from src.gui.app_context import AppContext
 
+_FREQ_UNITS = {"Hz": 1.0, "kHz": 1e3, "MHz": 1e6, "GHz": 1e9, "THz": 1e12}
+
+
+class _FreqInput:
+    """A frequency value + unit dropdown (Hz/kHz/MHz/GHz/THz), so entering
+    e.g. 10 GHz doesn't mean typing '10000000000' and risking a mistyped
+    zero. Switching units re-converts the displayed value so the actual
+    frequency it represents doesn't silently change underneath the user.
+    """
+
+    def __init__(self, default_hz: float, on_change=None) -> None:
+        self.value_spin = QDoubleSpinBox()
+        self.value_spin.setRange(0.000001, 1_000_000.0)
+        self.value_spin.setDecimals(6)
+        self.unit_combo = QComboBox()
+        self.unit_combo.addItems(list(_FREQ_UNITS.keys()))
+        self.unit_combo.setCurrentText("GHz")
+        self._last_unit = "GHz"
+        self.value_spin.setValue(default_hz / _FREQ_UNITS[self._last_unit])
+        self.unit_combo.currentTextChanged.connect(self._on_unit_changed)
+        if on_change is not None:
+            self.value_spin.valueChanged.connect(on_change)
+            self.unit_combo.currentTextChanged.connect(on_change)
+
+    def _on_unit_changed(self, new_unit: str) -> None:
+        hz = self.value_spin.value() * _FREQ_UNITS[self._last_unit]
+        self.value_spin.blockSignals(True)
+        self.value_spin.setValue(hz / _FREQ_UNITS[new_unit])
+        self.value_spin.blockSignals(False)
+        self._last_unit = new_unit
+
+    def hz(self) -> float:
+        return self.value_spin.value() * _FREQ_UNITS[self.unit_combo.currentText()]
+
 
 class VNASettingsTab(QWidget):
     def __init__(self, ctx: AppContext) -> None:
@@ -22,19 +56,15 @@ class VNASettingsTab(QWidget):
         grid = QGridLayout(box)
         d = self.ctx.settings.vna_defaults
 
-        grid.addWidget(QLabel("Start frequency (Hz):"), 0, 0)
-        self.start_freq_spin = QDoubleSpinBox()
-        self.start_freq_spin.setRange(1, 1e12)
-        self.start_freq_spin.setDecimals(1)
-        self.start_freq_spin.setValue(float(d.get("start_freq_hz", 1e9)))
-        grid.addWidget(self.start_freq_spin, 0, 1)
+        grid.addWidget(QLabel("Start frequency:"), 0, 0)
+        self.start_freq = _FreqInput(float(d.get("start_freq_hz", 1e9)), on_change=self._update_spacing)
+        grid.addWidget(self.start_freq.value_spin, 0, 1)
+        grid.addWidget(self.start_freq.unit_combo, 0, 2)
 
-        grid.addWidget(QLabel("Stop frequency (Hz):"), 0, 2)
-        self.stop_freq_spin = QDoubleSpinBox()
-        self.stop_freq_spin.setRange(1, 1e12)
-        self.stop_freq_spin.setDecimals(1)
-        self.stop_freq_spin.setValue(float(d.get("stop_freq_hz", 3e9)))
-        grid.addWidget(self.stop_freq_spin, 0, 3)
+        grid.addWidget(QLabel("Stop frequency:"), 0, 3)
+        self.stop_freq = _FreqInput(float(d.get("stop_freq_hz", 3e9)), on_change=self._update_spacing)
+        grid.addWidget(self.stop_freq.value_spin, 0, 4)
+        grid.addWidget(self.stop_freq.unit_combo, 0, 5)
 
         grid.addWidget(QLabel("Number of points:"), 1, 0)
         self.num_points_spin = QSpinBox()
@@ -102,13 +132,13 @@ class VNASettingsTab(QWidget):
 
     def _update_spacing(self) -> None:
         n = self.num_points_spin.value()
-        spacing = (self.stop_freq_spin.value() - self.start_freq_spin.value()) / max(1, n - 1)
+        spacing = (self.stop_freq.hz() - self.start_freq.hz()) / max(1, n - 1)
         self.spacing_label.setText(f"Frequency spacing: {spacing / 1e3:.4f} kHz  |  IF bandwidth is a separate setting")
 
     def build_config(self) -> VNASweepConfig:
         return VNASweepConfig(
-            start_freq_hz=self.start_freq_spin.value(),
-            stop_freq_hz=self.stop_freq_spin.value(),
+            start_freq_hz=self.start_freq.hz(),
+            stop_freq_hz=self.stop_freq.hz(),
             num_points=self.num_points_spin.value(),
             source_power_dbm=self.power_spin.value(),
             if_bandwidth_hz=self.ifbw_spin.value(),

@@ -51,6 +51,7 @@ def main() -> None:
     app.processEvents()
     assert ctx.power_supply is not None and ctx.power_supply.is_connected
     assert ctx.vna is not None and ctx.vna.is_connected
+    ctx.power_supply.set_voltage_limit(5.0)  # required before any current has a real effect
     print("[2] Both instruments connected:", ctx.power_supply.idn, "|", ctx.vna.idn)
 
     # 3. Calibration (populate directly, then let the tab refresh itself)

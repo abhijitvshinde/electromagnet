@@ -36,6 +36,7 @@ class LiveMeasurementTab(QWidget):
         self.vna_status_label = QLabel("VNA: Disconnected")
         self.max_current_label = QLabel("Max current: -")
         self.present_current_label = QLabel("Present current: -")
+        self.present_voltage_label = QLabel("Present voltage (actual): -")
         self.present_field_label = QLabel("Present field: -")
         self.progress_bar = QProgressBar()
         self.elapsed_label = QLabel("Elapsed: 00:00:00")
@@ -48,20 +49,30 @@ class LiveMeasurementTab(QWidget):
 
         widgets = [
             self.ps_status_label, self.vna_status_label, self.max_current_label,
-            self.present_current_label, self.present_field_label, self.direction_label,
-            self.vna_sweep_label, self.output_path_label,
+            self.present_current_label, self.present_voltage_label, self.present_field_label,
+            self.direction_label, self.vna_sweep_label, self.output_path_label,
         ]
         for i, w in enumerate(widgets):
             grid.addWidget(w, i // 2, i % 2)
-        grid.addWidget(self.progress_bar, 4, 0, 1, 2)
-        grid.addWidget(self.elapsed_label, 5, 0, 1, 2)
-        grid.addWidget(self.warning_label, 6, 0, 1, 2)
+        # Computed from len(widgets) rather than hardcoded, so adding/
+        # removing a status label above can't silently collide with these
+        # full-width rows again (it did once: the row numbers here were
+        # left pointing at a row a newly-added label had shifted into).
+        next_row = (len(widgets) + 1) // 2
+        grid.addWidget(self.elapsed_label, next_row, 0, 1, 2)
+        grid.addWidget(self.progress_bar, next_row + 1, 0, 1, 2)
+        grid.addWidget(self.warning_label, next_row + 2, 0, 1, 2)
         layout.addWidget(status_box)
 
         plots_row = QHBoxLayout()
         plots_row.addWidget(self.ctx.plot_manager.s11_plot_widget)
         plots_row.addWidget(self.ctx.plot_manager.s21_plot_widget)
         layout.addLayout(plots_row)
+
+        phase_plots_row = QHBoxLayout()
+        phase_plots_row.addWidget(self.ctx.plot_manager.s11_phase_plot_widget)
+        phase_plots_row.addWidget(self.ctx.plot_manager.s21_phase_plot_widget)
+        layout.addLayout(phase_plots_row)
 
         plot_controls = QHBoxLayout()
         self.overlay_check = QCheckBox("Overlay traces (unchecked = latest trace only)")
@@ -145,12 +156,34 @@ class LiveMeasurementTab(QWidget):
             problems.append("VNA is not connected.")
         if not ctx.calibration_manager.is_valid():
             problems.append("Calibration is missing or invalid.")
-        if not ctx.sequence_valid or not ctx.sweep_sequence:
-            problems.append("Field sweep sequence has not been built/validated on the Sweep tab.")
+        if not ctx.sweep_sequence:
+            problems.append("No field sweep sequence has been built yet -- go to the Sweep tab and "
+                             "click 'Build & Validate Sequence'.")
+        elif not ctx.sequence_valid:
+            bad_points = [
+                f"#{r.index + 1} ({r.field_oe:.4f} Oe): {r.status}"
+                for r in ctx.sweep_sequence if not r.is_valid
+            ]
+            problems.append(
+                "The built sweep sequence has invalid point(s) -- fix or remove them on the "
+                "Sweep tab (adjust the field range, calibrate further, or enable/widen "
+                "extrapolation) and rebuild before starting:\n    "
+                + "\n    ".join(bad_points)
+            )
         if ctx.data_manager.experiment_dir is None:
             problems.append("No experiment folder created (see Data tab).")
         if ctx.vna_sweep_config is None:
             problems.append("VNA has not been configured (see VNA Settings tab).")
+        if ctx.power_supply is not None and ctx.power_supply.is_connected:
+            needs_current = any(abs(row.current_a or 0.0) > 1e-12 for row in ctx.sweep_sequence)
+            if needs_current and not ctx.power_supply.last_voltage_limit:
+                problems.append(
+                    "No compliance-voltage setpoint has been sent to the power supply (or "
+                    "it is 0V). Click 'Set Monitoring Threshold & Compliance Voltage' on the "
+                    "Safety tab first (with the power supply connected) -- on a CV/CC supply, "
+                    "commanded currents have no physical effect without enough voltage "
+                    "compliance."
+                )
 
         if problems:
             QMessageBox.critical(self, "Cannot Start Measurement", "\n".join(f"- {p}" for p in problems))
@@ -204,16 +237,23 @@ class LiveMeasurementTab(QWidget):
     def _on_point_completed(self, result: MeasurementPointResult) -> None:
         if result.s11 is not None:
             self.ctx.plot_manager.update_s11(
-                result.s11.frequencies_hz, result.s11.magnitude_db, result.requested_field_oe, result.current_a
+                result.s11.frequencies_hz, result.s11.magnitude_db, result.s11.phase_deg,
+                result.requested_field_oe, result.current_a,
             )
         if result.s21 is not None:
             self.ctx.plot_manager.update_s21(
-                result.s21.frequencies_hz, result.s21.magnitude_db, result.requested_field_oe, result.current_a
+                result.s21.frequencies_hz, result.s21.magnitude_db, result.s21.phase_deg,
+                result.requested_field_oe, result.current_a,
             )
         if result.actual_current_a is not None:
             self.present_current_label.setText(
                 f"Present current: {result.current_a:.6f} A (actual: {result.actual_current_a:.6f} A)"
             )
+        if result.actual_voltage_v is not None:
+            # This is the instrument's real metered output voltage
+            # (MEAS:VOLT:DC?) -- NOT a setpoint/compliance ceiling, which
+            # is all the front panel may show in some display states.
+            self.present_voltage_label.setText(f"Present voltage (actual): {result.actual_voltage_v:.4f} V")
 
     def _on_error(self, message: str) -> None:
         self.warning_label.setText(message)

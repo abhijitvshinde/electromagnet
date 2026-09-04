@@ -37,13 +37,13 @@ class MainWindow(QMainWindow):
         self.data_tab = DataTab(self.ctx)
         self.log_tab = LogTab(self.ctx)
 
-        self.tabs.addTab(self.safety_tab, "1. Safety && Max Current")
+        self.tabs.addTab(self.safety_tab, "1. Safety")
         self.tabs.addTab(self.connection_tab, "2. Instrument Connection")
         self.tabs.addTab(self.calibration_tab, "3. Calibration")
         self.tabs.addTab(self.sweep_tab, "4. Field Sweep")
         self.tabs.addTab(self.vna_settings_tab, "5. VNA Settings")
-        self.tabs.addTab(self.live_tab, "6. Live Measurement")
-        self.tabs.addTab(self.data_tab, "7. Data && Experiment")
+        self.tabs.addTab(self.data_tab, "6. Data && Experiment")
+        self.tabs.addTab(self.live_tab, "7. Live Measurement")
         self.tabs.addTab(self.log_tab, "8. Event Log")
         self.setCentralWidget(self.tabs)
 

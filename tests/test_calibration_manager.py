@@ -74,6 +74,47 @@ def test_validation_flags_current_exceeding_max():
     assert any("exceeds maximum allowable current" in i for i in issues)
 
 
+def test_extrapolation_beyond_range_when_allowed():
+    cal, _ = make_manager(max_current=5.0)
+    cal.add_point(0.0, 0.0, direction="increasing")
+    cal.add_point(1.0, 100.0, direction="increasing")
+    # 120 Oe is 20% beyond the calibrated [0, 100] Oe range -- within the
+    # default 20% extrapolation margin. With only 2 points the curve fit
+    # is a straight line through them, so this should continue that line.
+    current = cal.current_for_field(120.0, direction="increasing", allow_extrapolation=True)
+    assert current == pytest.approx(1.2, rel=1e-6)
+
+
+def test_extrapolation_still_capped_beyond_margin():
+    cal, _ = make_manager(max_current=5.0)
+    cal.add_point(0.0, 0.0, direction="increasing")
+    cal.add_point(1.0, 100.0, direction="increasing")
+    # 200 Oe is 100% beyond the calibrated range -- past the default 20%
+    # extrapolation margin, so this must still be rejected.
+    with pytest.raises(CalibrationRangeError):
+        cal.current_for_field(200.0, direction="increasing", allow_extrapolation=True)
+
+
+def test_extrapolation_still_enforces_max_current():
+    cal, _ = make_manager(max_current=1.0)
+    cal.add_point(0.0, 0.0, direction="increasing")
+    cal.add_point(1.0, 100.0, direction="increasing")
+    # 110 Oe is within the extrapolation margin, but the extrapolated
+    # current (1.1 A) exceeds the configured max current of 1.0 A.
+    with pytest.raises(SafetyViolationError):
+        cal.current_for_field(110.0, direction="increasing", allow_extrapolation=True)
+
+
+def test_validate_field_request_flags_extrapolation():
+    cal, _ = make_manager(max_current=5.0)
+    cal.add_point(0.0, 0.0, direction="increasing")
+    cal.add_point(1.0, 100.0, direction="increasing")
+    ok, current, status = cal.validate_field_request(120.0, direction="increasing", allow_extrapolation=True)
+    assert ok
+    assert current == pytest.approx(1.2, rel=1e-6)
+    assert "EXTRAPOLATED" in status
+
+
 def test_average_of_increasing_and_decreasing_curves():
     cal, _ = make_manager()
     cal.add_point(0.0, 0.0, direction="increasing")

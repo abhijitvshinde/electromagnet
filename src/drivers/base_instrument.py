@@ -49,6 +49,12 @@ class Transport(abc.ABC):
     @abc.abstractmethod
     def is_open(self) -> bool: ...
 
+    def clear(self) -> None:
+        """Optional: clear the instrument's I/O buffers (Selective Device
+        Clear). Default no-op -- override where the underlying transport
+        actually supports it (e.g. real GPIB)."""
+        return None
+
 
 class VisaTransport(Transport):
     """Real GPIB transport built on PyVISA. No SCPI knowledge lives here."""
@@ -110,6 +116,16 @@ class VisaTransport(Transport):
             return self._resource.query(command)
         except Exception as exc:
             raise InstrumentCommunicationError(f"Query failed ({command!r}): {exc}") from exc
+
+    def clear(self) -> None:
+        """Selective Device Clear -- resets the instrument's I/O buffers
+        (e.g. recovers from a stuck/unread response) without a full *RST."""
+        if self._resource is None:
+            raise InstrumentCommunicationError("Transport is not open")
+        try:
+            self._resource.clear()
+        except Exception as exc:
+            raise InstrumentCommunicationError(f"Device clear failed: {exc}") from exc
 
 
 class BaseInstrumentDriver(QObject):
@@ -181,8 +197,78 @@ class BaseInstrumentDriver(QObject):
             self._log(f"Test communication failed: {exc}", level="error")
             return False
 
+    def clear_io_buffers(self) -> None:
+        """Best-effort Selective Device Clear -- recovers from a stuck/
+        unread response in the instrument's output buffer (SCPI error
+        -410 'Query INTERRUPTED') without a full *RST. No-op if the
+        transport doesn't support it (e.g. simulation)."""
+        try:
+            self.transport.clear()
+            self._log("Sent device clear (I/O buffer reset)")
+        except InstrumentCommunicationError as exc:
+            self._log(f"Device clear failed: {exc}", level="warning")
+
+    def check_for_errors(self, context: str = "", max_entries: int = 20) -> list[str]:
+        """Drain the instrument's SCPI error queue and raise if anything is
+        actually queued.
+
+        A write/query completing without a transport-level exception only
+        means the bytes were exchanged -- it does NOT mean the instrument
+        accepted the command. A malformed or unsupported command can be
+        silently rejected by the instrument's own parser while every layer
+        below us reports success. Call this after any command whose actual
+        effect matters (e.g. a current setpoint) to catch that case instead
+        of assuming the command took effect.
+
+        If the very first response is -410 "Query INTERRUPTED" (the
+        instrument still had an unread response from some earlier query
+        sitting in its output buffer -- e.g. an overlapping background
+        poll), this sends a device clear and retries once rather than
+        surfacing that as if it were a real error about our own command.
+        """
+        if "get_error_queue" not in self.profile.commands:
+            return []
+
+        for attempt in range(2):
+            errors: list[str] = []
+            interrupted = False
+            for i in range(max_entries):
+                resp = self._query_raw(self.profile.command("get_error_queue"), critical=False).strip()
+                if i == 0 and attempt == 0 and "-410" in resp:
+                    # This response isn't a real queued error -- it means
+                    # OUR query got interrupted by leftover unread data from
+                    # something earlier. Stop draining immediately (further
+                    # reads in this same attempt would be unreliable too)
+                    # rather than treating it as consuming a real queue slot.
+                    interrupted = True
+                    break
+                if not resp or resp.lstrip("+").startswith("0"):
+                    break
+                errors.append(resp)
+
+            if interrupted:
+                self._log(
+                    "Got -410 'Query INTERRUPTED' while checking for errors -- clearing I/O and retrying",
+                    level="warning",
+                )
+                self.clear_io_buffers()
+                continue
+
+            if errors:
+                joined = "; ".join(errors)
+                msg = f"Instrument reported error(s){' (' + context + ')' if context else ''}: {joined}"
+                self._log(msg, level="error")
+                raise InstrumentCommunicationError(msg)
+            return errors
+        return []
+
     # ------------------------------------------------------------------
-    def _write_raw(self, command: str) -> None:
+    def _write_raw(self, command: str, critical: bool = True) -> None:
+        """Send ``command``. If ``critical`` is False, a failure is still
+        raised to the caller but does NOT leave the driver's status stuck
+        on Error -- use this for optional/best-effort commands (e.g. an
+        extra hardware safety limit) whose failure doesn't mean the
+        instrument connection itself is broken."""
         if not self.transport.is_open:
             raise InstrumentCommunicationError("Not connected")
         prev_status = self._status
@@ -190,14 +276,15 @@ class BaseInstrumentDriver(QObject):
         try:
             self.transport.write(command)
         except InstrumentCommunicationError as exc:
-            self._set_status(InstrumentStatus.ERROR)
+            self._set_status(InstrumentStatus.ERROR if critical else prev_status)
             self.error_occurred.emit(str(exc))
             raise
         finally:
             if self._status == InstrumentStatus.BUSY:
                 self._set_status(prev_status)
 
-    def _query_raw(self, command: str) -> str:
+    def _query_raw(self, command: str, critical: bool = True) -> str:
+        """See :meth:`_write_raw` for the meaning of ``critical``."""
         if not self.transport.is_open:
             raise InstrumentCommunicationError("Not connected")
         prev_status = self._status
@@ -205,18 +292,18 @@ class BaseInstrumentDriver(QObject):
         try:
             return self.transport.query(command)
         except InstrumentCommunicationError as exc:
-            self._set_status(InstrumentStatus.ERROR)
+            self._set_status(InstrumentStatus.ERROR if critical else prev_status)
             self.error_occurred.emit(str(exc))
             raise
         finally:
             if self._status == InstrumentStatus.BUSY:
                 self._set_status(prev_status)
 
-    def _write_cmd(self, key: str, **kwargs) -> None:
-        self._write_raw(self.profile.command(key, **kwargs))
+    def _write_cmd(self, key: str, critical: bool = True, **kwargs) -> None:
+        self._write_raw(self.profile.command(key, **kwargs), critical=critical)
 
-    def _query_cmd(self, key: str, **kwargs) -> str:
-        return self._query_raw(self.profile.command(key, **kwargs))
+    def _query_cmd(self, key: str, critical: bool = True, **kwargs) -> str:
+        return self._query_raw(self.profile.command(key, **kwargs), critical=critical)
 
     def wait(self, seconds: float) -> None:
         time.sleep(max(0.0, seconds))

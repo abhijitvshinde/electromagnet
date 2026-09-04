@@ -291,21 +291,37 @@ class CalibrationManager:
         direction: str = "all",
         method: str = "linear",
         context: str = "field-to-current conversion",
+        allow_extrapolation: bool = False,
+        extrapolation_margin_fraction: float = 0.2,
     ) -> float:
         """Convert a requested field (Oe) into a validated current (A).
 
-        Never extrapolates: raises :class:`CalibrationRangeError` if
-        ``field_oe`` falls outside the calibrated range. The resulting
-        current is always passed through the SafetyManager before being
-        returned, so callers get either a safe current or an exception.
+        By default, never extrapolates: raises :class:`CalibrationRangeError`
+        if ``field_oe`` falls outside the calibrated range. Pass
+        ``allow_extrapolation=True`` to instead fit a curve through the
+        existing points and evaluate it beyond the measured range -- capped
+        at ``extrapolation_margin_fraction`` of the calibrated span past
+        either end (still rejected beyond that, since the fit becomes
+        increasingly unreliable the further out it's evaluated). The
+        resulting current is always passed through the SafetyManager before
+        being returned, so callers get either a safe current or an
+        exception.
         """
         subset = self._select(direction)
         if len(subset) < 2:
             raise CalibrationRangeError("Not enough calibration points to interpolate")
 
         if direction == "average" and {"increasing", "decreasing"} <= {p.direction for p in self.points}:
-            inc = self.current_for_field(field_oe, direction="increasing", method=method, context=context)
-            dec = self.current_for_field(field_oe, direction="decreasing", method=method, context=context)
+            inc = self.current_for_field(
+                field_oe, direction="increasing", method=method, context=context,
+                allow_extrapolation=allow_extrapolation,
+                extrapolation_margin_fraction=extrapolation_margin_fraction,
+            )
+            dec = self.current_for_field(
+                field_oe, direction="decreasing", method=method, context=context,
+                allow_extrapolation=allow_extrapolation,
+                extrapolation_margin_fraction=extrapolation_margin_fraction,
+            )
             return self.safety_manager.validate_current((inc + dec) / 2.0, context=context)
 
         subset = sorted(subset, key=lambda p: p.field_oe)
@@ -314,9 +330,23 @@ class CalibrationManager:
 
         lo, hi = float(fields.min()), float(fields.max())
         if field_oe < lo - 1e-9 or field_oe > hi + 1e-9:
-            raise CalibrationRangeError(
-                f"Requested field {field_oe:.4f} Oe is outside the calibrated range "
-                f"[{lo:.4f}, {hi:.4f}] Oe -- extrapolation is not permitted"
+            if not allow_extrapolation:
+                raise CalibrationRangeError(
+                    f"Requested field {field_oe:.4f} Oe is outside the calibrated range "
+                    f"[{lo:.4f}, {hi:.4f}] Oe -- extrapolation is not permitted"
+                )
+            span = hi - lo
+            margin = extrapolation_margin_fraction * span
+            if field_oe < lo - margin - 1e-9 or field_oe > hi + margin + 1e-9:
+                raise CalibrationRangeError(
+                    f"Requested field {field_oe:.4f} Oe is too far outside the calibrated "
+                    f"range [{lo:.4f}, {hi:.4f}] Oe -- extrapolation is capped at "
+                    f"{extrapolation_margin_fraction * 100:.0f}% beyond the range, i.e. "
+                    f"[{lo - margin:.4f}, {hi + margin:.4f}] Oe"
+                )
+            current = self._extrapolate_current_for_field(field_oe, fields, currents)
+            return self.safety_manager.validate_current(
+                current, context=f"{context} (EXTRAPOLATED beyond calibrated range via curve fit)"
             )
 
         if method == "cubic" and len(subset) >= 4:
@@ -329,13 +359,40 @@ class CalibrationManager:
 
         return self.safety_manager.validate_current(current, context=context)
 
+    @staticmethod
+    def _extrapolate_current_for_field(field_oe: float, fields: np.ndarray, currents: np.ndarray) -> float:
+        """Fit a low-order polynomial through the calibration points and
+        evaluate it at ``field_oe``, which lies outside the measured range.
+
+        Degree is capped at 2 (quadratic) regardless of how many points are
+        available -- a higher-order polynomial fit can swing wildly once
+        evaluated outside the data it was fit to (Runge's phenomenon),
+        which is exactly the wrong behavior for a value about to be
+        commanded into real hardware.
+        """
+        degree = 2 if len(fields) >= 3 else 1
+        coeffs = np.polyfit(fields, currents, degree)
+        return float(np.polyval(coeffs, field_oe))
+
     def validate_field_request(
-        self, field_oe: float, direction: str = "all", method: str = "linear"
+        self,
+        field_oe: float,
+        direction: str = "all",
+        method: str = "linear",
+        allow_extrapolation: bool = False,
+        extrapolation_margin_fraction: float = 0.2,
     ) -> tuple[bool, float | None, str]:
         """Non-raising check used to build sweep validation tables."""
+        rng = self.field_range(direction)
+        outside_measured_range = rng is not None and (field_oe < rng[0] - 1e-9 or field_oe > rng[1] + 1e-9)
         try:
-            current = self.current_for_field(field_oe, direction=direction, method=method)
-            return True, current, "OK"
+            current = self.current_for_field(
+                field_oe, direction=direction, method=method,
+                allow_extrapolation=allow_extrapolation,
+                extrapolation_margin_fraction=extrapolation_margin_fraction,
+            )
+            status = "OK (EXTRAPOLATED beyond calibrated range via curve fit)" if outside_measured_range else "OK"
+            return True, current, status
         except CalibrationRangeError as exc:
             return False, None, f"OUTSIDE CALIBRATION RANGE: {exc}"
         except SafetyViolationError as exc:

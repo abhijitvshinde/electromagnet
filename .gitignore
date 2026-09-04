@@ -4,8 +4,16 @@ __pycache__/
 *.pyc
 logs/
 experiments/
+state/
 .pytest_cache/
 *.egg-info/
 build/
 dist/
 *.spec
+batch.log
+# Unrelated Ansys HFSS/AEDT simulation project (own .venv, binary results) --
+# not part of this app.
+hardware/
+# Loose experimental output accidentally saved to the project root instead
+# of experiments/ or sample_data/.
+/*.csv

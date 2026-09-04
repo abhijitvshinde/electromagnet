@@ -2,12 +2,12 @@
   "electromagnet_equipment_number": "YP180829-188-2",
   "simulation_mode_default": true,
   "gpib": {
-    "power_supply_address": "GPIB0::5::INSTR",
+    "power_supply_address": "GPIB0::3::INSTR",
     "vna_address": "GPIB0::16::INSTR",
     "timeout_ms": 5000
   },
   "ramping": {
-    "default_current_step_a": 0.05,
+    "default_current_step_a": 0.01,
     "default_step_delay_s": 0.2,
     "default_stabilization_time_s": 1.0,
     "default_current_tolerance_a": 0.005

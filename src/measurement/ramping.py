@@ -73,7 +73,20 @@ class CurrentRamper:
         should_abort: Callable[[], bool] | None = None,
         wait_if_paused: Callable[[], None] | None = None,
         stabilize: bool = True,
+        verify_no_error: bool = False,
     ) -> None:
+        """Ramp to ``target_current_a``.
+
+        ``verify_no_error``: when True, drains the instrument's SCPI error
+        queue once after the final step and raises if it rejected the
+        command -- a transport-level write succeeding does not guarantee
+        the instrument's own parser accepted it (e.g. a malformed/
+        unsupported command for that specific profile). Off by default to
+        avoid doubling GPIB traffic on every intermediate step of a long
+        automated sweep; turn it on for manual/diagnostic use where
+        confirming the command actually took effect matters more than raw
+        throughput.
+        """
         present = self.power_supply.last_commanded_current_a
         steps = generate_ramp_steps(present, target_current_a, self.config.current_step_a)
         self._log(f"Ramping current {present:.6f} A -> {target_current_a:.6f} A ({context}), {len(steps)} step(s)")
@@ -85,6 +98,9 @@ class CurrentRamper:
                 raise AbortRequested(f"Ramp to {target_current_a:.6f} A aborted at {step_value:.6f} A")
             self.power_supply.set_current(step_value, context=context)
             time.sleep(self.config.step_delay_s)
+
+        if verify_no_error:
+            self.power_supply.check_for_errors(context=f"{context} (target {target_current_a:.6f} A)")
 
         if stabilize and self.config.stabilization_time_s > 0:
             time.sleep(self.config.stabilization_time_s)

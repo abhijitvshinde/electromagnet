@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
-    QComboBox, QDoubleSpinBox, QGridLayout, QGroupBox, QHBoxLayout, QLabel,
+    QCheckBox, QComboBox, QDoubleSpinBox, QGridLayout, QGroupBox, QHBoxLayout, QLabel,
     QLineEdit, QMessageBox, QPushButton, QSpinBox, QTableWidget, QTableWidgetItem,
     QVBoxLayout, QWidget,
 )
@@ -81,6 +81,21 @@ class SweepTab(QWidget):
         self.interp_combo.addItems(["linear", "cubic"])
         grid.addWidget(self.interp_combo, 2, 7)
 
+        self.extrapolate_check = QCheckBox(
+            "Allow extrapolation beyond calibrated range (curve fit)"
+        )
+        self.extrapolate_check.toggled.connect(
+            lambda checked: self.extrap_margin_spin.setEnabled(checked)
+        )
+        grid.addWidget(self.extrapolate_check, 3, 0, 1, 4)
+
+        grid.addWidget(QLabel("Extrapolation margin (% of calibrated span):"), 3, 4, 1, 2)
+        self.extrap_margin_spin = QDoubleSpinBox()
+        self.extrap_margin_spin.setRange(0.0, 200.0)
+        self.extrap_margin_spin.setValue(20.0)
+        self.extrap_margin_spin.setEnabled(False)
+        grid.addWidget(self.extrap_margin_spin, 3, 6)
+
         layout.addWidget(box)
 
         build_btn = QPushButton("Build && Validate Sequence")
@@ -91,9 +106,9 @@ class SweepTab(QWidget):
         self.summary_label.setWordWrap(True)
         layout.addWidget(self.summary_label)
 
-        self.table = QTableWidget(0, 6)
+        self.table = QTableWidget(0, 7)
         self.table.setHorizontalHeaderLabels(
-            ["#", "Field (Oe)", "Current (A)", "Direction", "In Calib. Range", "Status"]
+            ["#", "Field (Oe)", "Current (A)", "Direction", "In Calib. Range", "Extrapolated", "Status"]
         )
         layout.addWidget(self.table)
 
@@ -120,10 +135,25 @@ class SweepTab(QWidget):
             QMessageBox.warning(self, "Invalid Sweep", str(exc))
             return
 
+        allow_extrapolation = self.extrapolate_check.isChecked()
+        if allow_extrapolation:
+            proceed = QMessageBox.question(
+                self, "Confirm Extrapolation",
+                "Extrapolation is enabled: any field outside your measured calibration "
+                "points will be converted to a current via a curve fit rather than "
+                "actual measured data. Electromagnets often saturate (flatten out) at "
+                "high current, so an extrapolated point can be less accurate the "
+                "further it is from your calibrated range.\n\nProceed?",
+            )
+            if proceed != QMessageBox.Yes:
+                return
+
         rows = build_validation_table(
             pairs, self.ctx.calibration_manager, self.ctx.safety_manager,
             calibration_direction_mode=self.calib_dir_combo.currentText(),
             interpolation_method=self.interp_combo.currentText(),
+            allow_extrapolation=allow_extrapolation,
+            extrapolation_margin_fraction=self.extrap_margin_spin.value() / 100.0,
         )
         self.sequence = rows
         self.ctx.sweep_sequence = rows
@@ -134,12 +164,15 @@ class SweepTab(QWidget):
             values = [
                 str(i + 1), f"{r.field_oe:.4f}",
                 f"{r.current_a:.6f}" if r.current_a is not None else "-",
-                r.direction, "Yes" if r.within_calibration_range else "No", r.status,
+                r.direction, "Yes" if r.within_calibration_range else "No",
+                "Yes" if r.extrapolated else "No", r.status,
             ]
             for col, val in enumerate(values):
                 item = QTableWidgetItem(val)
                 if not r.is_valid:
                     item.setBackground(Qt_red())
+                elif r.extrapolated:
+                    item.setBackground(Qt_yellow())
                 self.table.setItem(i, col, item)
 
         self.summary_label.setText(
@@ -156,3 +189,8 @@ class SweepTab(QWidget):
 def Qt_red():
     from PySide6.QtGui import QColor
     return QColor(255, 205, 205)
+
+
+def Qt_yellow():
+    from PySide6.QtGui import QColor
+    return QColor(255, 243, 176)

@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 
 from src.drivers.vna import SParameterResult
+from src.plotting.plot_manager import PlotManager
 
 
 @dataclass
@@ -32,6 +33,7 @@ class MeasurementPointResult:
     timestamp: str
     s11: SParameterResult | None
     s21: SParameterResult | None
+    actual_voltage_v: float | None = None
 
 
 def _sanitize(name: str) -> str:
@@ -54,6 +56,11 @@ class DataManager:
         self.experiment_dir: Path | None = None
         self._metadata: dict[str, Any] = {}
         self._combined_rows: list[dict[str, Any]] = []
+        # One summary per saved point, kept purely for regenerating the
+        # cumulative overlay graphs in _export_graphs() -- separate from
+        # _combined_rows (which is flat, per-frequency-point data for CSV
+        # export) since these need whole arrays grouped by measurement point.
+        self._point_summaries: list[dict[str, Any]] = []
 
     def _log(self, msg: str, level: str = "info") -> None:
         if self._logger is not None:
@@ -72,10 +79,11 @@ class DataManager:
         dir_name = f"{timestamp}_{_sanitize(experiment_name)}"
         self.experiment_dir = self.output_root / dir_name
 
-        for sub in ("raw", "processed", "plots", "calibration", "logs"):
+        for sub in ("raw", "processed", "plots", "graphs", "calibration", "logs"):
             (self.experiment_dir / sub).mkdir(parents=True, exist_ok=True)
 
         self._combined_rows = []
+        self._point_summaries = []
         self._metadata = {
             "experiment_name": experiment_name,
             "sample_name": sample_name,
@@ -136,6 +144,7 @@ class DataManager:
             "requested_field_oe": np.full(n, point.requested_field_oe),
             "current_a": np.full(n, point.current_a),
             "actual_current_a": np.full(n, point.actual_current_a if point.actual_current_a is not None else np.nan),
+            "actual_voltage_v": np.full(n, point.actual_voltage_v if point.actual_voltage_v is not None else np.nan),
             "direction": [point.direction] * n,
             "sweep_number": np.full(n, point.sweep_number),
             "timestamp": [point.timestamp] * n,
@@ -168,8 +177,50 @@ class DataManager:
 
         self._append_hdf5(point, freqs)
 
+        self._point_summaries.append(
+            {
+                "label": f"H={point.requested_field_oe:.2f} Oe",
+                "freqs": freqs,
+                "s11_magnitude_db": point.s11.magnitude_db if point.s11 is not None else None,
+                "s11_phase_deg": point.s11.phase_deg if point.s11 is not None else None,
+                "s21_magnitude_db": point.s21.magnitude_db if point.s21 is not None else None,
+                "s21_phase_deg": point.s21.phase_deg if point.s21 is not None else None,
+            }
+        )
+        self._export_graphs()
+
         self._log(f"Saved point {point.index} ({point.requested_field_oe:.4f} Oe) -> {csv_path.name}")
         return csv_path
+
+    def _export_graphs(self) -> None:
+        """(Re)render and save a cumulative overlay PNG -- every point
+        measured so far in this experiment, on one figure -- for each of
+        S11/S21 magnitude/phase, into experiment_dir/graphs/. Refreshed
+        after every point, mirroring the "written to disk the instant it's
+        measured" philosophy this class uses for the raw/combined/HDF5
+        data. The legend is always placed outside the plot area (see
+        PlotManager.save_overlay_figure) so it never overlaps the traces,
+        however many points have been overlaid."""
+        if self.experiment_dir is None or not self._point_summaries:
+            return
+        for s_param in ("s11", "s21"):
+            for quantity, unit, label in (
+                ("magnitude_db", "dB", "Magnitude"),
+                ("phase_deg", "deg", "Phase"),
+            ):
+                key = f"{s_param}_{quantity}"
+                series = [
+                    (s["label"], s["freqs"], s[key]) for s in self._point_summaries if s.get(key) is not None
+                ]
+                if not series:
+                    continue
+                png_path = self.experiment_dir / "graphs" / f"{s_param}_{label.lower()}.png"
+                PlotManager.save_overlay_figure(
+                    series,
+                    title=f"{s_param.upper()} {label} ({unit})",
+                    ylabel=f"{label} ({unit})",
+                    png_path=png_path,
+                )
 
     def _append_hdf5(self, point: MeasurementPointResult, freqs: np.ndarray) -> None:
         if self.experiment_dir is None:
@@ -185,6 +236,7 @@ class DataManager:
             grp.attrs["requested_field_oe"] = point.requested_field_oe
             grp.attrs["current_a"] = point.current_a
             grp.attrs["actual_current_a"] = point.actual_current_a if point.actual_current_a is not None else np.nan
+            grp.attrs["actual_voltage_v"] = point.actual_voltage_v if point.actual_voltage_v is not None else np.nan
             grp.attrs["direction"] = point.direction
             grp.attrs["sweep_number"] = point.sweep_number
             grp.attrs["timestamp"] = point.timestamp

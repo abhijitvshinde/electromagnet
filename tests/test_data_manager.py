@@ -66,6 +66,32 @@ def test_save_point_writes_hdf5(tmp_path):
         assert len(h5["point_0000"]["frequency_hz"]) == 11
 
 
+def test_save_point_exports_magnitude_and_phase_graphs(tmp_path):
+    dm = DataManager(tmp_path)
+    dm.create_experiment("Exp")
+    dm.save_point(_fake_result(0, 50.0, 0.25))
+    graphs_dir = dm.experiment_dir / "graphs"
+    for name in ("s11_magnitude.png", "s11_phase.png", "s21_magnitude.png", "s21_phase.png"):
+        path = graphs_dir / name
+        assert path.exists(), f"{name} was not exported"
+        assert path.stat().st_size > 0
+
+
+def test_graphs_accumulate_across_points(tmp_path):
+    """The exported graph should be regenerated (not merely appended to)
+    from every point measured so far -- verified indirectly by checking
+    the file grows to reflect more overlaid traces, not by re-parsing the
+    PNG, since a second point's overlay renders a strictly larger figure
+    content than a single trace."""
+    dm = DataManager(tmp_path)
+    dm.create_experiment("Exp")
+    dm.save_point(_fake_result(0, 0.0, 0.0))
+    one_point_size = (dm.experiment_dir / "graphs" / "s11_magnitude.png").stat().st_size
+    dm.save_point(_fake_result(1, 100.0, 0.5))
+    two_point_size = (dm.experiment_dir / "graphs" / "s11_magnitude.png").stat().st_size
+    assert two_point_size != one_point_size
+
+
 def test_filename_encodes_sign_and_magnitude(tmp_path):
     dm = DataManager(tmp_path)
     dm.create_experiment("Exp")

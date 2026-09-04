@@ -88,6 +88,17 @@ class VNAController(BaseInstrumentDriver):
             self._write_cmd("set_averaging_count", channel=ch, count=config.averages)
             self._write_cmd("clear_averaging", channel=ch)
         self._write_cmd("set_trigger_mode", channel=ch, mode=config.trigger_mode)
+
+        # Create the S11/S21 measurements now, once, before any sweep is ever
+        # triggered. On some instruments (e.g. the PNA-X), triggering a sweep
+        # on a channel with no measurement defined yet never reports
+        # completion via *OPC? -- it just hangs. get_s_parameter() only
+        # (re)selects an already-created measurement; it does not redefine it.
+        if config.measure_s11 and "create_measurement_s11" in self.profile.commands:
+            self._write_cmd("create_measurement_s11", channel=ch)
+        if config.measure_s21 and "create_measurement_s21" in self.profile.commands:
+            self._write_cmd("create_measurement_s21", channel=ch)
+
         self._config = config
         self._log(
             "VNA configured: "
@@ -103,11 +114,14 @@ class VNAController(BaseInstrumentDriver):
         self._write_cmd("trigger_single_sweep", channel=self._config.channel)
         start = time.monotonic()
         while True:
-            try:
-                resp = self._query_cmd("query_sweep_complete").strip()
-                if resp.startswith("1"):
-                    return
-            except InstrumentCommunicationError:
+            # A genuine communication failure here must not be mistaken for
+            # sweep completion -- let it propagate so the caller knows the
+            # sweep status is actually unknown, not "done".
+            resp = self._query_cmd("query_sweep_complete").strip()
+            # Some instruments (confirmed: Keysight N5242B) return SCPI
+            # numerics with an explicit sign, e.g. '+1' rather than '1' --
+            # strip a leading '+' before checking so we don't miss it.
+            if resp.lstrip("+").startswith("1"):
                 return
             if time.monotonic() - start > timeout_s:
                 raise InstrumentCommunicationError("Timed out waiting for VNA sweep to complete")
@@ -123,7 +137,24 @@ class VNAController(BaseInstrumentDriver):
         select_key = "select_measurement_s11" if which == "S11" else "select_measurement_s21"
         data_key = "get_sdata_s11" if which == "S11" else "get_sdata_s21"
         self._write_cmd(select_key, channel=ch)
-        raw = self._query_cmd(data_key, channel=ch)
+        try:
+            raw = self._query_cmd(data_key, channel=ch)
+        except InstrumentCommunicationError as exc:
+            # CONFIRMED on real hardware: a large ASCII data transfer
+            # (many points) can occasionally exceed the configured VISA
+            # timeout even though the sweep itself already completed --
+            # this leaves the instrument reporting SCPI error -420 "Query
+            # UNTERMINATED" afterward, since our side gave up reading a
+            # response the instrument was still sending. Clear I/O and
+            # retry once (re-selecting the measurement first) rather than
+            # failing the whole measurement point over one slow/transient
+            # read. If your points/IF-bandwidth setup makes this a
+            # recurring problem, increase the VNA's GPIB timeout on the
+            # Connection tab.
+            self._log(f"{which} data query failed ({exc}) -- clearing I/O and retrying once", level="warning")
+            self.clear_io_buffers()
+            self._write_cmd(select_key, channel=ch)
+            raw = self._query_cmd(data_key, channel=ch)
         values = self._parse_ascii_vector(raw)
         if len(values) != 2 * self._config.num_points:
             raise InstrumentCommunicationError(

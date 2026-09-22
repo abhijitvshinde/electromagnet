@@ -7,7 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.calibration.calibration_manager import CalibrationManager
-from src.config.app_config import AppSettings, UserState
+from src.config.app_config import AppSettings, PROJECT_ROOT, UserState
 from src.data.data_manager import DataManager
 from src.drivers.power_supply import PowerSupplyController
 from src.drivers.simulation import SimulationEngine
@@ -20,10 +20,13 @@ from src.safety.safety_manager import SafetyManager
 class AppContext:
     def __init__(self) -> None:
         self.settings = AppSettings.load()
-        self.logger = ExperimentLogger(Path("./logs"))
+        self.logger = ExperimentLogger(PROJECT_ROOT / "logs")
         self.safety_manager = SafetyManager(logger=self.logger)
         self.calibration_manager = CalibrationManager(self.safety_manager, logger=self.logger)
-        self.data_manager = DataManager(Path(self.settings.data_output_root), logger=self.logger)
+        data_output_root = Path(self.settings.data_output_root)
+        if not data_output_root.is_absolute():
+            data_output_root = PROJECT_ROOT / data_output_root
+        self.data_manager = DataManager(data_output_root, logger=self.logger)
         self.plot_manager = PlotManager()
         self.simulation_engine = SimulationEngine()
         self.simulation_mode: bool = self.settings.simulation_mode_default

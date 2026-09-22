@@ -38,7 +38,7 @@ class DataTab(QWidget):
 
         grid.addWidget(QLabel("Output folder:"), 1, 2)
         folder_row = QHBoxLayout()
-        self.output_folder_edit = QLineEdit(self.ctx.settings.data_output_root)
+        self.output_folder_edit = QLineEdit(str(self.ctx.data_manager.output_root))
         folder_row.addWidget(self.output_folder_edit)
         browse_btn = QPushButton("Browse...")
         browse_btn.clicked.connect(self._browse_folder)

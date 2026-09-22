@@ -1,10 +1,16 @@
 """Tab 9: About."""
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from src.gui.app_context import AppContext
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_LOGO_PATH = _PROJECT_ROOT / "assets" / "ncat_logo.png"
 
 
 class AboutTab(QWidget):
@@ -16,6 +22,16 @@ class AboutTab(QWidget):
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
         layout.addStretch(1)
+
+        if _LOGO_PATH.exists():
+            logo_pixmap = QPixmap(str(_LOGO_PATH))
+            if not logo_pixmap.isNull():
+                logo_label = QLabel()
+                logo_label.setPixmap(
+                    logo_pixmap.scaledToWidth(420, Qt.TransformationMode.SmoothTransformation)
+                )
+                logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                layout.addWidget(logo_label)
 
         label = QLabel(
             "<div style='text-align:center;'>"

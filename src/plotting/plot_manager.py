@@ -190,33 +190,44 @@ class PlotManager:
         """Render every ``(label, freqs_hz, values)`` trace in ``series``
         onto one static figure and save it.
 
-        The legend is always placed outside the axes (to the right, via
-        ``bbox_to_anchor``) rather than matplotlib's default in-plot
-        placement, so it never overlaps the traces no matter how many
-        points are overlaid.
+        The legend is always placed outside the axes (below, via
+        ``bbox_to_anchor``), wrapped at ``LEGEND_COLUMNS`` entries per row,
+        so it never overlaps or shrinks the plot area no matter how many
+        traces are overlaid -- it just grows downward into more rows.
         """
+        import math
+
         import matplotlib
 
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
-        fig, ax = plt.subplots(figsize=(8, 4.5))
+        LEGEND_COLUMNS = 10
+        n_traces = len(series)
+        legend_rows = max(1, math.ceil(n_traces / LEGEND_COLUMNS))
+
+        fig, ax = plt.subplots(figsize=(10, 5.5 + 0.25 * legend_rows))
         for label, freqs, values in series:
             ax.plot(np.asarray(freqs) / 1e9, values, label=label, linewidth=1.2)
         ax.set_xlabel("Frequency (GHz)")
         ax.set_ylabel(ylabel)
         ax.set_title(title)
         ax.grid(True, alpha=0.3)
-        ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), fontsize="small", borderaxespad=0.0)
-        # Reserve the right ~18% of the figure for the legend so
-        # tight_layout doesn't shrink it back under the axes.
-        fig.tight_layout(rect=(0.0, 0.0, 0.82, 1.0))
+        if n_traces:
+            ax.legend(
+                loc="upper center",
+                bbox_to_anchor=(0.5, -0.12),
+                ncol=min(LEGEND_COLUMNS, n_traces),
+                fontsize="small",
+                borderaxespad=0.0,
+            )
+        fig.tight_layout()
         if png_path:
             png_path.parent.mkdir(parents=True, exist_ok=True)
-            fig.savefig(png_path, dpi=150)
+            fig.savefig(png_path, dpi=150, bbox_inches="tight")
         if pdf_path:
             pdf_path.parent.mkdir(parents=True, exist_ok=True)
-            fig.savefig(pdf_path)
+            fig.savefig(pdf_path, bbox_inches="tight")
         plt.close(fig)
 
     @staticmethod

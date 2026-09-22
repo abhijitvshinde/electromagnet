@@ -119,8 +119,14 @@ class VNASettingsTab(QWidget):
         self.s11_check.setChecked(True)
         self.s21_check = QCheckBox("Measure S21")
         self.s21_check.setChecked(True)
+        self.s12_check = QCheckBox("Measure S12")
+        self.s12_check.setChecked(True)
+        self.s22_check = QCheckBox("Measure S22")
+        self.s22_check.setChecked(True)
         grid.addWidget(self.s11_check, 5, 0)
         grid.addWidget(self.s21_check, 5, 1)
+        grid.addWidget(self.s12_check, 5, 2)
+        grid.addWidget(self.s22_check, 5, 3)
 
         layout.addWidget(box)
 
@@ -149,6 +155,8 @@ class VNASettingsTab(QWidget):
             trigger_mode=self.trigger_combo.currentText(),
             measure_s11=self.s11_check.isChecked(),
             measure_s21=self.s21_check.isChecked(),
+            measure_s12=self.s12_check.isChecked(),
+            measure_s22=self.s22_check.isChecked(),
         )
 
     def _apply(self) -> None:

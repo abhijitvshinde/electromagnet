@@ -76,14 +76,20 @@ data exists.
 ## 7. Live Measurement
 
 The main screen: connection status, maximum current, present
-current/field, progress, elapsed time, and the live S11/S21 plots
-(zoom/pan/autoscale, overlay or latest-trace-only). **Start Measurement**
-checks every precondition (limit set, both instruments connected, valid
+current/field, progress, elapsed time, and the live S11/S21/S12/S22
+magnitude plots (zoom/pan/autoscale, overlay or latest-trace-only; phase
+is saved as data but not plotted live). **Start Measurement** checks
+every precondition (limit set, both instruments connected, valid
 calibration, valid sequence, VNA configured, experiment folder created)
 and asks for confirmation before it enables the output and begins. Data
-for every field point is saved to disk the instant it is measured.
+(magnitude and phase, for every S-parameter enabled on VNA Settings) for
+every field point is saved to disk the instant it is measured, and a
+cumulative magnitude graph per S-parameter is (re)exported to
+`experiment_dir/graphs/` after each point.
 **Pause / Resume / Abort / Ramp to Zero / EMERGENCY STOP** are always
-available during a run.
+available during a run. **Measure Background (0A)** ramps to zero
+current, triggers one sweep, and saves it separately (under
+`experiment_dir/background/`) as a reference measurement.
 
 ## 8. Event Log
 

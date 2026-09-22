@@ -1,5 +1,7 @@
-"""Live S11/S21 plotting (pyqtgraph, fast incremental updates) plus static
-figure rendering (matplotlib) for saved PNG/PDF outputs and 2D color maps.
+"""Live S11/S21/S12/S22 MAGNITUDE plotting (pyqtgraph, fast incremental
+updates) plus static figure rendering (matplotlib) for saved PNG/PDF
+outputs and 2D color maps. Phase is deliberately not plotted live (it's
+still saved as numeric data -- see src/data/data_manager.py).
 
 Nothing in this module touches instrument or measurement state directly --
 the MeasurementController pushes data to it via plain method calls, all
@@ -77,7 +79,7 @@ class _LegendPanel(QWidget):
 
 @dataclass
 class _PlotSlot:
-    """One live plot (S11/S21 magnitude or phase): the composite widget
+    """One live plot (S11/S21/S12/S22 magnitude): the composite widget
     added to the GUI layout (plot + legend side by side), the pyqtgraph
     PlotWidget itself, and the legend panel."""
 
@@ -114,25 +116,27 @@ def _build_slot(title: str, ylabel: str, y_units: str) -> _PlotSlot:
 
 class PlotManager:
     def __init__(self) -> None:
-        self._s11_mag = _build_slot("S11 Magnitude (dB)", "S11 Magnitude", "dB")
-        self._s21_mag = _build_slot("S21 Magnitude (dB)", "S21 Magnitude", "dB")
-        self._s11_phase = _build_slot("S11 Phase (deg)", "S11 Phase", "deg")
-        self._s21_phase = _build_slot("S21 Phase (deg)", "S21 Phase", "deg")
+        self._slots: dict[str, _PlotSlot] = {
+            "S11": _build_slot("S11 Magnitude (dB)", "S11 Magnitude", "dB"),
+            "S21": _build_slot("S21 Magnitude (dB)", "S21 Magnitude", "dB"),
+            "S12": _build_slot("S12 Magnitude (dB)", "S12 Magnitude", "dB"),
+            "S22": _build_slot("S22 Magnitude (dB)", "S22 Magnitude", "dB"),
+        }
 
         # Public names kept stable -- the GUI adds these QWidgets directly
         # to its layout (GraphicsLayoutWidget is itself a QWidget, so this
         # is a drop-in replacement for the plain PlotWidget used before).
-        self.s11_plot_widget = self._s11_mag.widget
-        self.s21_plot_widget = self._s21_mag.widget
-        self.s11_phase_plot_widget = self._s11_phase.widget
-        self.s21_phase_plot_widget = self._s21_phase.widget
+        self.s11_plot_widget = self._slots["S11"].widget
+        self.s21_plot_widget = self._slots["S21"].widget
+        self.s12_plot_widget = self._slots["S12"].widget
+        self.s22_plot_widget = self._slots["S22"].widget
 
         self.overlay_mode: bool = False
         self._trace_counter: int = 0
 
     # ------------------------------------------------------------------
     def clear(self) -> None:
-        for slot in (self._s11_mag, self._s21_mag, self._s11_phase, self._s21_phase):
+        for slot in self._slots.values():
             slot.plot_widget.clear()
             slot.legend.clear()
             slot.curves.clear()
@@ -144,12 +148,11 @@ class PlotManager:
             self.clear()
 
     def set_trace_visible(self, s_param: str, trace_id: int, visible: bool) -> None:
-        slots = (self._s11_mag, self._s11_phase) if s_param == "S11" else (self._s21_mag, self._s21_phase)
-        for slot in slots:
-            curve = slot.curves.get(trace_id)
-            if curve is not None:
-                curve.setVisible(visible)
-            slot.legend.set_visible(trace_id, visible)
+        slot = self._slots[s_param]
+        curve = slot.curves.get(trace_id)
+        if curve is not None:
+            curve.setVisible(visible)
+        slot.legend.set_visible(trace_id, visible)
 
     # ------------------------------------------------------------------
     def _plot_into(self, slot: _PlotSlot, trace_id: int, freqs, values, label: str, color) -> None:
@@ -161,26 +164,18 @@ class PlotManager:
         slot.legend.add_entry(trace_id, color, label)
         slot.curves[trace_id] = curve
 
-    def update_s11(self, freqs: np.ndarray, mag_db: np.ndarray, phase_deg: np.ndarray, field_oe: float, current_a: float) -> int:
+    def update(self, s_param: str, freqs: np.ndarray, mag_db: np.ndarray, field_oe: float, current_a: float) -> int:
+        """Plot one trace of magnitude data for ``s_param`` ('S11', 'S21',
+        'S12', or 'S22'). Returns a trace_id usable with set_trace_visible."""
         label = f"H={field_oe:.2f} Oe"
         trace_id = self._trace_counter
         self._trace_counter += 1
         color = _PALETTE[trace_id % len(_PALETTE)]
-        self._plot_into(self._s11_mag, trace_id, freqs, mag_db, label, color)
-        self._plot_into(self._s11_phase, trace_id, freqs, phase_deg, label, color)
-        return trace_id
-
-    def update_s21(self, freqs: np.ndarray, mag_db: np.ndarray, phase_deg: np.ndarray, field_oe: float, current_a: float) -> int:
-        label = f"H={field_oe:.2f} Oe"
-        trace_id = self._trace_counter
-        self._trace_counter += 1
-        color = _PALETTE[trace_id % len(_PALETTE)]
-        self._plot_into(self._s21_mag, trace_id, freqs, mag_db, label, color)
-        self._plot_into(self._s21_phase, trace_id, freqs, phase_deg, label, color)
+        self._plot_into(self._slots[s_param], trace_id, freqs, mag_db, label, color)
         return trace_id
 
     def autoscale(self) -> None:
-        for slot in (self._s11_mag, self._s21_mag, self._s11_phase, self._s21_phase):
+        for slot in self._slots.values():
             slot.plot_widget.autoRange()
 
     # ------------------------------------------------------------------

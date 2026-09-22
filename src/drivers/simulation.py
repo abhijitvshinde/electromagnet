@@ -153,18 +153,27 @@ class SimulatedVNATransport(Transport):
 
         s21_db = -0.5 - self.engine.dip_depth_db * lorentzian
         s11_db = -20 + 6 * lorentzian
+        # S12/S22 are not physically derived (this is a stand-in model, not
+        # a real 2-port network) -- just distinct-enough variants of S21/S11
+        # so the four traces are visually distinguishable in simulation.
+        s12_db = -0.7 - 0.9 * self.engine.dip_depth_db * lorentzian
+        s22_db = -18 + 5 * lorentzian
 
         n_avg = max(1, self.averages) if self.averaging_enabled else 1
         noise_scale = self.engine.noise_db / np.sqrt(n_avg)
-        s21_db = s21_db + self.engine.rng.gauss(0, 1) * 0 + np.array(
-            [self.engine.rng.gauss(0, noise_scale) for _ in freqs]
-        )
+        s21_db = s21_db + np.array([self.engine.rng.gauss(0, noise_scale) for _ in freqs])
         s11_db = s11_db + np.array([self.engine.rng.gauss(0, noise_scale) for _ in freqs])
+        s12_db = s12_db + np.array([self.engine.rng.gauss(0, noise_scale) for _ in freqs])
+        s22_db = s22_db + np.array([self.engine.rng.gauss(0, noise_scale) for _ in freqs])
 
         s21_mag = 10 ** (s21_db / 20.0)
         s11_mag = 10 ** (s11_db / 20.0)
+        s12_mag = 10 ** (s12_db / 20.0)
+        s22_mag = 10 ** (s22_db / 20.0)
         s21_phase = -360.0 * freqs / freqs[-1] + 40 * lorentzian
         s11_phase = 180.0 * np.sin(2 * np.pi * (freqs - freqs[0]) / (freqs[-1] - freqs[0]))
+        s12_phase = -360.0 * freqs / freqs[-1] - 25 * lorentzian
+        s22_phase = 150.0 * np.sin(2 * np.pi * (freqs - freqs[0]) / (freqs[-1] - freqs[0]))
 
         self._last_sweep = {
             "freqs": freqs,
@@ -172,6 +181,10 @@ class SimulatedVNATransport(Transport):
             "s21_imag": s21_mag * np.sin(np.radians(s21_phase)),
             "s11_real": s11_mag * np.cos(np.radians(s11_phase)),
             "s11_imag": s11_mag * np.sin(np.radians(s11_phase)),
+            "s12_real": s12_mag * np.cos(np.radians(s12_phase)),
+            "s12_imag": s12_mag * np.sin(np.radians(s12_phase)),
+            "s22_real": s22_mag * np.cos(np.radians(s22_phase)),
+            "s22_imag": s22_mag * np.sin(np.radians(s22_phase)),
         }
 
     def write(self, command: str) -> None:
@@ -216,6 +229,8 @@ class SimulatedVNATransport(Transport):
             "PLACEHOLDER_CLEAR_AVG",
             "PLACEHOLDER_SELECT_MEAS S11",
             "PLACEHOLDER_SELECT_MEAS S21",
+            "PLACEHOLDER_SELECT_MEAS S12",
+            "PLACEHOLDER_SELECT_MEAS S22",
             "*RST",
             "*CLS",
         ) or command.startswith("PLACEHOLDER_SELECT_CHANNEL") or command.startswith(
@@ -253,5 +268,15 @@ class SimulatedVNATransport(Transport):
             if not self._last_sweep:
                 self._simulate_sweep()
             re_, im_ = self._last_sweep["s21_real"], self._last_sweep["s21_imag"]
+            return ",".join(f"{r:.8f},{i:.8f}" for r, i in zip(re_, im_))
+        if command == "PLACEHOLDER_GET_SDATA S12":
+            if not self._last_sweep:
+                self._simulate_sweep()
+            re_, im_ = self._last_sweep["s12_real"], self._last_sweep["s12_imag"]
+            return ",".join(f"{r:.8f},{i:.8f}" for r, i in zip(re_, im_))
+        if command == "PLACEHOLDER_GET_SDATA S22":
+            if not self._last_sweep:
+                self._simulate_sweep()
+            re_, im_ = self._last_sweep["s22_real"], self._last_sweep["s22_imag"]
             return ",".join(f"{r:.8f},{i:.8f}" for r, i in zip(re_, im_))
         raise InstrumentCommunicationError(f"Simulated VNA: unknown query {command!r}")

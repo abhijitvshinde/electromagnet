@@ -34,6 +34,8 @@ class MeasurementPointResult:
     s11: SParameterResult | None
     s21: SParameterResult | None
     actual_voltage_v: float | None = None
+    s12: SParameterResult | None = None
+    s22: SParameterResult | None = None
 
 
 def _sanitize(name: str) -> str:
@@ -79,7 +81,7 @@ class DataManager:
         dir_name = f"{timestamp}_{_sanitize(experiment_name)}"
         self.experiment_dir = self.output_root / dir_name
 
-        for sub in ("raw", "processed", "plots", "graphs", "calibration", "logs"):
+        for sub in ("raw", "processed", "plots", "graphs", "background", "calibration", "logs"):
             (self.experiment_dir / sub).mkdir(parents=True, exist_ok=True)
 
         self._combined_rows = []
@@ -136,8 +138,8 @@ class DataManager:
         if self.experiment_dir is None:
             raise RuntimeError("No experiment folder created yet")
 
-        n = len(point.s11.frequencies_hz) if point.s11 is not None else len(point.s21.frequencies_hz)
-        freqs = point.s11.frequencies_hz if point.s11 is not None else point.s21.frequencies_hz
+        freqs = self._point_frequencies(point)
+        n = len(freqs)
 
         data: dict[str, Any] = {
             "frequency_hz": freqs,
@@ -149,22 +151,16 @@ class DataManager:
             "sweep_number": np.full(n, point.sweep_number),
             "timestamp": [point.timestamp] * n,
         }
-        if point.s11 is not None:
-            data.update(
-                s11_real=point.s11.real,
-                s11_imag=point.s11.imag,
-                s11_magnitude=point.s11.magnitude_linear,
-                s11_magnitude_db=point.s11.magnitude_db,
-                s11_phase_deg=point.s11.phase_deg,
-            )
-        if point.s21 is not None:
-            data.update(
-                s21_real=point.s21.real,
-                s21_imag=point.s21.imag,
-                s21_magnitude=point.s21.magnitude_linear,
-                s21_magnitude_db=point.s21.magnitude_db,
-                s21_phase_deg=point.s21.phase_deg,
-            )
+        for key in ("s11", "s21", "s12", "s22"):
+            s = getattr(point, key)
+            if s is not None:
+                data.update({
+                    f"{key}_real": s.real,
+                    f"{key}_imag": s.imag,
+                    f"{key}_magnitude": s.magnitude_linear,
+                    f"{key}_magnitude_db": s.magnitude_db,
+                    f"{key}_phase_deg": s.phase_deg,
+                })
 
         df = pd.DataFrame(data)
         filename = _field_current_filename(point.requested_field_oe, point.current_a) + ".csv"
@@ -177,50 +173,51 @@ class DataManager:
 
         self._append_hdf5(point, freqs)
 
-        self._point_summaries.append(
-            {
-                "label": f"H={point.requested_field_oe:.2f} Oe",
-                "freqs": freqs,
-                "s11_magnitude_db": point.s11.magnitude_db if point.s11 is not None else None,
-                "s11_phase_deg": point.s11.phase_deg if point.s11 is not None else None,
-                "s21_magnitude_db": point.s21.magnitude_db if point.s21 is not None else None,
-                "s21_phase_deg": point.s21.phase_deg if point.s21 is not None else None,
-            }
-        )
+        summary = {"label": f"H={point.requested_field_oe:.2f} Oe", "freqs": freqs}
+        for key in ("s11", "s21", "s12", "s22"):
+            s = getattr(point, key)
+            summary[f"{key}_magnitude_db"] = s.magnitude_db if s is not None else None
+        self._point_summaries.append(summary)
         self._export_graphs()
 
         self._log(f"Saved point {point.index} ({point.requested_field_oe:.4f} Oe) -> {csv_path.name}")
         return csv_path
 
+    @staticmethod
+    def _point_frequencies(point: MeasurementPointResult) -> np.ndarray:
+        for key in ("s11", "s21", "s12", "s22"):
+            s = getattr(point, key)
+            if s is not None:
+                return s.frequencies_hz
+        raise ValueError("MeasurementPointResult has no S-parameter data at all")
+
     def _export_graphs(self) -> None:
         """(Re)render and save a cumulative overlay PNG -- every point
         measured so far in this experiment, on one figure -- for each of
-        S11/S21 magnitude/phase, into experiment_dir/graphs/. Refreshed
-        after every point, mirroring the "written to disk the instant it's
-        measured" philosophy this class uses for the raw/combined/HDF5
-        data. The legend is always placed outside the plot area (see
-        PlotManager.save_overlay_figure) so it never overlaps the traces,
-        however many points have been overlaid."""
+        S11/S21/S12/S22 MAGNITUDE, into experiment_dir/graphs/. Phase is
+        still saved as numeric data (see save_point/save_background) but
+        deliberately not graphed. Refreshed after every point, mirroring
+        the "written to disk the instant it's measured" philosophy this
+        class uses for the raw/combined/HDF5 data. The legend is always
+        placed outside the plot area (see PlotManager.save_overlay_figure)
+        so it never overlaps the traces, however many points have been
+        overlaid."""
         if self.experiment_dir is None or not self._point_summaries:
             return
-        for s_param in ("s11", "s21"):
-            for quantity, unit, label in (
-                ("magnitude_db", "dB", "Magnitude"),
-                ("phase_deg", "deg", "Phase"),
-            ):
-                key = f"{s_param}_{quantity}"
-                series = [
-                    (s["label"], s["freqs"], s[key]) for s in self._point_summaries if s.get(key) is not None
-                ]
-                if not series:
-                    continue
-                png_path = self.experiment_dir / "graphs" / f"{s_param}_{label.lower()}.png"
-                PlotManager.save_overlay_figure(
-                    series,
-                    title=f"{s_param.upper()} {label} ({unit})",
-                    ylabel=f"{label} ({unit})",
-                    png_path=png_path,
-                )
+        for s_param in ("s11", "s21", "s12", "s22"):
+            key = f"{s_param}_magnitude_db"
+            series = [
+                (s["label"], s["freqs"], s[key]) for s in self._point_summaries if s.get(key) is not None
+            ]
+            if not series:
+                continue
+            png_path = self.experiment_dir / "graphs" / f"{s_param}_magnitude.png"
+            PlotManager.save_overlay_figure(
+                series,
+                title=f"{s_param.upper()} Magnitude (dB)",
+                ylabel="Magnitude (dB)",
+                png_path=png_path,
+            )
 
     def _append_hdf5(self, point: MeasurementPointResult, freqs: np.ndarray) -> None:
         if self.experiment_dir is None:
@@ -241,12 +238,67 @@ class DataManager:
             grp.attrs["sweep_number"] = point.sweep_number
             grp.attrs["timestamp"] = point.timestamp
             grp.create_dataset("frequency_hz", data=freqs)
-            if point.s11 is not None:
-                grp.create_dataset("s11_real", data=point.s11.real)
-                grp.create_dataset("s11_imag", data=point.s11.imag)
-            if point.s21 is not None:
-                grp.create_dataset("s21_real", data=point.s21.real)
-                grp.create_dataset("s21_imag", data=point.s21.imag)
+            for key in ("s11", "s21", "s12", "s22"):
+                s = getattr(point, key)
+                if s is not None:
+                    grp.create_dataset(f"{key}_real", data=s.real)
+                    grp.create_dataset(f"{key}_imag", data=s.imag)
+
+    # ------------------------------------------------------------------
+    def save_background(self, point: MeasurementPointResult) -> Path:
+        """Save a standalone reference/background measurement (typically
+        S11/S21/S12/S22 at 0A current, i.e. no applied field) separately
+        from the field-sweep data: its own CSV and HDF5 group, not mixed
+        into the sweep's raw/combined data or the cumulative overlay
+        graphs in experiment_dir/graphs/ (which track the field sweep
+        specifically)."""
+        if self.experiment_dir is None:
+            raise RuntimeError("No experiment folder created yet")
+
+        freqs = self._point_frequencies(point)
+        n = len(freqs)
+        data: dict[str, Any] = {
+            "frequency_hz": freqs,
+            "current_a": np.full(n, point.current_a),
+            "actual_current_a": np.full(n, point.actual_current_a if point.actual_current_a is not None else np.nan),
+            "actual_voltage_v": np.full(n, point.actual_voltage_v if point.actual_voltage_v is not None else np.nan),
+            "timestamp": [point.timestamp] * n,
+        }
+        for key in ("s11", "s21", "s12", "s22"):
+            s = getattr(point, key)
+            if s is not None:
+                data.update({
+                    f"{key}_real": s.real,
+                    f"{key}_imag": s.imag,
+                    f"{key}_magnitude": s.magnitude_linear,
+                    f"{key}_magnitude_db": s.magnitude_db,
+                    f"{key}_phase_deg": s.phase_deg,
+                })
+
+        df = pd.DataFrame(data)
+        background_dir = self.experiment_dir / "background"
+        background_dir.mkdir(parents=True, exist_ok=True)
+        csv_path = background_dir / "background.csv"
+        df.to_csv(csv_path, index=False)
+
+        h5_path = self.experiment_dir / "processed" / "experiment_data.h5"
+        with h5py.File(h5_path, "a") as h5:
+            if "background" in h5:
+                del h5["background"]
+            grp = h5.create_group("background")
+            grp.attrs["current_a"] = point.current_a
+            grp.attrs["actual_current_a"] = point.actual_current_a if point.actual_current_a is not None else np.nan
+            grp.attrs["actual_voltage_v"] = point.actual_voltage_v if point.actual_voltage_v is not None else np.nan
+            grp.attrs["timestamp"] = point.timestamp
+            grp.create_dataset("frequency_hz", data=freqs)
+            for key in ("s11", "s21", "s12", "s22"):
+                s = getattr(point, key)
+                if s is not None:
+                    grp.create_dataset(f"{key}_real", data=s.real)
+                    grp.create_dataset(f"{key}_imag", data=s.imag)
+
+        self._log(f"Saved background measurement (I={point.current_a:.6f} A) -> {csv_path}")
+        return csv_path
 
     # ------------------------------------------------------------------
     def build_colormap(self, which: str) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:

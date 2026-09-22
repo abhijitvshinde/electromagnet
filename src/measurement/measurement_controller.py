@@ -65,6 +65,8 @@ class MeasurementController(QThread):
         ramp_config: RampConfig,
         measure_s11: bool = True,
         measure_s21: bool = True,
+        measure_s12: bool = True,
+        measure_s22: bool = True,
         logger=None,
     ) -> None:
         super().__init__()
@@ -75,6 +77,8 @@ class MeasurementController(QThread):
         self.ramp_config = ramp_config
         self.measure_s11 = measure_s11
         self.measure_s21 = measure_s21
+        self.measure_s12 = measure_s12
+        self.measure_s22 = measure_s22
         self._logger = logger
 
         self._sequence: list[SweepPoint] = []
@@ -160,6 +164,8 @@ class MeasurementController(QThread):
                 self.vna.trigger_sweep_and_wait()
                 s11 = self.vna.get_s_parameter("S11") if self.measure_s11 else None
                 s21 = self.vna.get_s_parameter("S21") if self.measure_s21 else None
+                s12 = self.vna.get_s_parameter("S12") if self.measure_s12 else None
+                s22 = self.vna.get_s_parameter("S22") if self.measure_s22 else None
                 actual_current = self.power_supply.get_actual_current()
                 # Read for display/logging only -- this is the instrument's
                 # real metered output voltage (MEAS:VOLT:DC?), not any
@@ -179,6 +185,8 @@ class MeasurementController(QThread):
                     timestamp=datetime.now().isoformat(timespec="seconds"),
                     s11=s11,
                     s21=s21,
+                    s12=s12,
+                    s22=s22,
                     actual_voltage_v=actual_voltage,
                 )
                 self.data_manager.save_point(result)

@@ -1,6 +1,7 @@
 """Vector Network Analyzer driver.
 
-Retrieves complex S11/S21 data. The default parsing assumes the common
+Retrieves complex S11/S21/S12/S22 data (full 2-port S-parameter set). The
+default parsing assumes the common
 ASCII comma-separated real,imag-pair SDATA format used by many VNAs. If
 your instrument only supports IEEE-488.2 binary block transfers, replace
 :meth:`VNAController._parse_ascii_vector` with a binary-block parser and
@@ -32,6 +33,8 @@ class VNASweepConfig:
     trigger_mode: str
     measure_s11: bool = True
     measure_s21: bool = True
+    measure_s12: bool = True
+    measure_s22: bool = True
 
     @property
     def frequency_spacing_hz(self) -> float:
@@ -98,6 +101,10 @@ class VNAController(BaseInstrumentDriver):
             self._write_cmd("create_measurement_s11", channel=ch)
         if config.measure_s21 and "create_measurement_s21" in self.profile.commands:
             self._write_cmd("create_measurement_s21", channel=ch)
+        if config.measure_s12 and "create_measurement_s12" in self.profile.commands:
+            self._write_cmd("create_measurement_s12", channel=ch)
+        if config.measure_s22 and "create_measurement_s22" in self.profile.commands:
+            self._write_cmd("create_measurement_s22", channel=ch)
 
         self._config = config
         self._log(
@@ -128,14 +135,14 @@ class VNAController(BaseInstrumentDriver):
             time.sleep(0.02)
 
     def get_s_parameter(self, which: str) -> SParameterResult:
-        if which not in ("S11", "S21"):
-            raise ValueError("which must be 'S11' or 'S21'")
+        if which not in ("S11", "S21", "S12", "S22"):
+            raise ValueError("which must be one of 'S11', 'S21', 'S12', 'S22'")
         if self._config is None:
             raise InstrumentCommunicationError("VNA has not been configured")
 
         ch = self._config.channel
-        select_key = "select_measurement_s11" if which == "S11" else "select_measurement_s21"
-        data_key = "get_sdata_s11" if which == "S11" else "get_sdata_s21"
+        select_key = f"select_measurement_{which.lower()}"
+        data_key = f"get_sdata_{which.lower()}"
         self._write_cmd(select_key, channel=ch)
         try:
             raw = self._query_cmd(data_key, channel=ch)

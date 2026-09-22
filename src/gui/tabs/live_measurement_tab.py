@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import time
+from datetime import datetime
 
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
@@ -10,9 +11,11 @@ from PySide6.QtWidgets import (
 )
 
 from src.data.data_manager import MeasurementPointResult
+from src.drivers.base_instrument import InstrumentCommunicationError
 from src.gui.app_context import AppContext
 from src.measurement.measurement_controller import MeasurementController, MeasurementSummary
-from src.measurement.ramping import RampConfig
+from src.measurement.ramping import CurrentRamper, RampConfig
+from src.safety.safety_manager import SafetyViolationError
 
 
 class LiveMeasurementTab(QWidget):
@@ -64,15 +67,12 @@ class LiveMeasurementTab(QWidget):
         grid.addWidget(self.warning_label, next_row + 2, 0, 1, 2)
         layout.addWidget(status_box)
 
-        plots_row = QHBoxLayout()
-        plots_row.addWidget(self.ctx.plot_manager.s11_plot_widget)
-        plots_row.addWidget(self.ctx.plot_manager.s21_plot_widget)
-        layout.addLayout(plots_row)
-
-        phase_plots_row = QHBoxLayout()
-        phase_plots_row.addWidget(self.ctx.plot_manager.s11_phase_plot_widget)
-        phase_plots_row.addWidget(self.ctx.plot_manager.s21_phase_plot_widget)
-        layout.addLayout(phase_plots_row)
+        plots_grid = QGridLayout()
+        plots_grid.addWidget(self.ctx.plot_manager.s11_plot_widget, 0, 0)
+        plots_grid.addWidget(self.ctx.plot_manager.s21_plot_widget, 0, 1)
+        plots_grid.addWidget(self.ctx.plot_manager.s12_plot_widget, 1, 0)
+        plots_grid.addWidget(self.ctx.plot_manager.s22_plot_widget, 1, 1)
+        layout.addLayout(plots_grid)
 
         plot_controls = QHBoxLayout()
         self.overlay_check = QCheckBox("Overlay traces (unchecked = latest trace only)")
@@ -105,6 +105,19 @@ class LiveMeasurementTab(QWidget):
         self.stabilization_spin.setValue(self.ctx.settings.default_stabilization_time_s)
         ramp_grid.addWidget(self.stabilization_spin, 0, 5)
         layout.addWidget(ramp_box)
+
+        background_row = QHBoxLayout()
+        self.background_btn = QPushButton("Measure Background (0A)")
+        self.background_btn.setToolTip(
+            "Ramps current to 0A, enables output, triggers one VNA sweep, and saves "
+            "S11/S21/S12/S22 (whichever are enabled on VNA Settings) as this "
+            "experiment's background/reference measurement -- separate from the "
+            "field-sweep data."
+        )
+        self.background_btn.clicked.connect(self._measure_background)
+        background_row.addWidget(self.background_btn)
+        background_row.addStretch(1)
+        layout.addLayout(background_row)
 
         btn_row = QHBoxLayout()
         self.start_btn = QPushButton("Start Measurement")
@@ -204,6 +217,7 @@ class LiveMeasurementTab(QWidget):
         self.controller = MeasurementController(
             ctx.power_supply, ctx.vna, ctx.safety_manager, ctx.data_manager, ramp_config,
             measure_s11=ctx.vna_sweep_config.measure_s11, measure_s21=ctx.vna_sweep_config.measure_s21,
+            measure_s12=ctx.vna_sweep_config.measure_s12, measure_s22=ctx.vna_sweep_config.measure_s22,
             logger=ctx.logger,
         )
         self.controller.configure(ctx.sweep_sequence)
@@ -235,16 +249,12 @@ class LiveMeasurementTab(QWidget):
         self.direction_label.setText(f"Direction: {row.direction}")
 
     def _on_point_completed(self, result: MeasurementPointResult) -> None:
-        if result.s11 is not None:
-            self.ctx.plot_manager.update_s11(
-                result.s11.frequencies_hz, result.s11.magnitude_db, result.s11.phase_deg,
-                result.requested_field_oe, result.current_a,
-            )
-        if result.s21 is not None:
-            self.ctx.plot_manager.update_s21(
-                result.s21.frequencies_hz, result.s21.magnitude_db, result.s21.phase_deg,
-                result.requested_field_oe, result.current_a,
-            )
+        for s_param in ("S11", "S21", "S12", "S22"):
+            s = getattr(result, s_param.lower())
+            if s is not None:
+                self.ctx.plot_manager.update(
+                    s_param, s.frequencies_hz, s.magnitude_db, result.requested_field_oe, result.current_a
+                )
         if result.actual_current_a is not None:
             self.present_current_label.setText(
                 f"Present current: {result.current_a:.6f} A (actual: {result.actual_current_a:.6f} A)"
@@ -279,8 +289,6 @@ class LiveMeasurementTab(QWidget):
     def _manual_ramp_to_zero(self) -> None:
         if self.ctx.power_supply is None:
             return
-        from src.measurement.ramping import CurrentRamper
-
         ramp_config = RampConfig(
             current_step_a=self.ramp_step_spin.value(), step_delay_s=self.ramp_delay_spin.value()
         )
@@ -288,6 +296,73 @@ class LiveMeasurementTab(QWidget):
             context="manual ramp to zero (live measurement tab)"
         )
         self.present_current_label.setText("Present current: 0.000000 A")
+
+    def _measure_background(self) -> None:
+        """Ramp to 0A, enable output, trigger one VNA sweep, and save
+        S11/S21/S12/S22 as this experiment's background/reference
+        measurement -- e.g. to later subtract/normalize against. Runs
+        synchronously on the GUI thread (like _manual_ramp_to_zero above):
+        it's a single quick action, not a long sequence needing its own
+        thread with pause/resume/abort."""
+        ctx = self.ctx
+        problems = []
+        if ctx.power_supply is None or not ctx.power_supply.is_connected:
+            problems.append("Power supply is not connected.")
+        if ctx.vna is None or not ctx.vna.is_connected:
+            problems.append("VNA is not connected.")
+        if ctx.data_manager.experiment_dir is None:
+            problems.append("No experiment folder created (see Data tab).")
+        if ctx.vna_sweep_config is None:
+            problems.append("VNA has not been configured (see VNA Settings tab).")
+        if self.controller is not None and self.controller.isRunning():
+            problems.append("A field-sweep measurement is currently running. Abort it first.")
+        if problems:
+            QMessageBox.critical(self, "Cannot Measure Background", "\n".join(f"- {p}" for p in problems))
+            return
+
+        if QMessageBox.question(
+            self, "Measure Background",
+            "This will ramp the current to 0A, enable the output, trigger a VNA "
+            "sweep, and save the result as this experiment's background/reference "
+            "measurement (separate from the field-sweep data). Proceed?",
+        ) != QMessageBox.Yes:
+            return
+
+        self.background_btn.setEnabled(False)
+        try:
+            ramp_config = RampConfig(
+                current_step_a=self.ramp_step_spin.value(),
+                step_delay_s=self.ramp_delay_spin.value(),
+                stabilization_time_s=self.stabilization_spin.value(),
+            )
+            CurrentRamper(ctx.power_supply, ramp_config, logger=ctx.logger).ramp_to_zero(
+                context="background measurement"
+            )
+            ctx.power_supply.enable_output()
+            ctx.vna.trigger_sweep_and_wait()
+
+            cfg = ctx.vna_sweep_config
+            s11 = ctx.vna.get_s_parameter("S11") if cfg.measure_s11 else None
+            s21 = ctx.vna.get_s_parameter("S21") if cfg.measure_s21 else None
+            s12 = ctx.vna.get_s_parameter("S12") if cfg.measure_s12 else None
+            s22 = ctx.vna.get_s_parameter("S22") if cfg.measure_s22 else None
+            actual_current = ctx.power_supply.get_actual_current()
+            actual_voltage = ctx.power_supply.get_actual_voltage()
+
+            result = MeasurementPointResult(
+                index=-1, requested_field_oe=0.0, current_a=0.0,
+                actual_current_a=actual_current, direction="background", sweep_number=0,
+                timestamp=datetime.now().isoformat(timespec="seconds"),
+                s11=s11, s21=s21, s12=s12, s22=s22, actual_voltage_v=actual_voltage,
+            )
+            path = ctx.data_manager.save_background(result)
+        except (SafetyViolationError, InstrumentCommunicationError) as exc:
+            QMessageBox.critical(self, "Background Measurement Failed", str(exc))
+            return
+        finally:
+            self.background_btn.setEnabled(True)
+
+        QMessageBox.information(self, "Background Measurement Saved", f"Saved to:\n{path}")
 
     def _emergency_stop(self) -> None:
         self.ctx.safety_manager.trigger_emergency_stop()

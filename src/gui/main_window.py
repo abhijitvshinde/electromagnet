@@ -1,4 +1,4 @@
-"""Main application window: ties the eight tabs together and enforces the
+"""Main application window: ties the nine tabs together and enforces the
 mandatory safe-shutdown sequence when the application is closed while a
 process is active or the power-supply output is enabled.
 """
@@ -7,6 +7,7 @@ from __future__ import annotations
 from PySide6.QtWidgets import QMainWindow, QMessageBox, QTabWidget
 
 from src.gui.app_context import AppContext
+from src.gui.tabs.about_tab import AboutTab
 from src.gui.tabs.calibration_tab import CalibrationTab
 from src.gui.tabs.connection_tab import ConnectionTab
 from src.gui.tabs.data_tab import DataTab
@@ -36,6 +37,7 @@ class MainWindow(QMainWindow):
         self.live_tab = LiveMeasurementTab(self.ctx)
         self.data_tab = DataTab(self.ctx)
         self.log_tab = LogTab(self.ctx)
+        self.about_tab = AboutTab(self.ctx)
 
         self.tabs.addTab(self.safety_tab, "1. Safety")
         self.tabs.addTab(self.connection_tab, "2. Instrument Connection")
@@ -45,12 +47,13 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.data_tab, "6. Data && Experiment")
         self.tabs.addTab(self.live_tab, "7. Live Measurement")
         self.tabs.addTab(self.log_tab, "8. Event Log")
+        self.tabs.addTab(self.about_tab, "9. About")
         self.setCentralWidget(self.tabs)
 
-        # Every tab except Safety and the Event Log requires the mandatory
-        # maximum-current limit to be configured first.
+        # Every tab except Safety, the Event Log, and About requires the
+        # mandatory maximum-current limit to be configured first.
         for i in range(self.tabs.count()):
-            if i not in (0, 7):
+            if i not in (0, 7, 8):
                 self.tabs.setTabEnabled(i, False)
         self.ctx.safety_manager.max_current_changed.connect(self._on_max_current_set)
 

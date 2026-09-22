@@ -102,6 +102,11 @@ underlying log files persist in `logs/` (application-wide) and inside
 each experiment folder (`event_log.log`), regardless of what's cleared
 from this view.
 
+## 9. About
+
+Attribution and a short description of the tool. Always accessible, even
+before the mandatory maximum current is set.
+
 ## Closing the application
 
 If a process is running or the output is enabled, closing the window

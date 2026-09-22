@@ -179,6 +179,7 @@ class DataManager:
             summary[f"{key}_magnitude_db"] = s.magnitude_db if s is not None else None
         self._point_summaries.append(summary)
         self._export_graphs()
+        self._export_colormaps()
 
         self._log(f"Saved point {point.index} ({point.requested_field_oe:.4f} Oe) -> {csv_path.name}")
         return csv_path
@@ -217,6 +218,26 @@ class DataManager:
                 title=f"{s_param.upper()} Magnitude (dB)",
                 ylabel="Magnitude (dB)",
                 png_path=png_path,
+            )
+
+    def _export_colormaps(self) -> None:
+        """(Re)generate and save a magnitude-vs-frequency-vs-field 2D
+        colormap PNG for every S-parameter with data so far, into
+        experiment_dir/plots/. Saved for all of S11/S21/S12/S22, refreshed
+        after every point -- the GUI (Data tab) only displays S11/S21
+        live, but S12/S22 are still written to disk here for later
+        analysis."""
+        if self.experiment_dir is None:
+            return
+        for which in ("S11", "S21", "S12", "S22"):
+            result = self.build_colormap(which)
+            if result is None:
+                continue
+            fields, freqs, matrix = result
+            PlotManager.render_colormap_figure(
+                fields, freqs, matrix,
+                title=f"{which} Magnitude (dB)",
+                png_path=self.experiment_dir / "plots" / f"{which.lower()}_colormap.png",
             )
 
     def _append_hdf5(self, point: MeasurementPointResult, freqs: np.ndarray) -> None:

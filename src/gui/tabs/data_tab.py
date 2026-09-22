@@ -65,21 +65,22 @@ class DataTab(QWidget):
         self.folder_label.setWordWrap(True)
         layout.addWidget(self.folder_label)
 
-        colormap_box = QGroupBox("2D Color Maps (Magnitude vs. Frequency and Field)")
-        cm_layout = QVBoxLayout(colormap_box)
-        btn_row = QHBoxLayout()
-        s11_btn = QPushButton("Generate S11 Color Map")
-        s11_btn.clicked.connect(lambda: self._generate_colormap("S11"))
-        s21_btn = QPushButton("Generate S21 Color Map")
-        s21_btn.clicked.connect(lambda: self._generate_colormap("S21"))
-        btn_row.addWidget(s11_btn)
-        btn_row.addWidget(s21_btn)
-        cm_layout.addLayout(btn_row)
+        colormap_row = QHBoxLayout()
+        s11_box, self._s11_figure, self._s11_canvas = self._build_colormap_box("S11")
+        s21_box, self._s21_figure, self._s21_canvas = self._build_colormap_box("S21")
+        colormap_row.addWidget(s11_box)
+        colormap_row.addWidget(s21_box)
+        layout.addLayout(colormap_row)
+        self.refresh_colormaps()
 
-        self.figure = Figure(figsize=(7, 4))
-        self.canvas = FigureCanvasQTAgg(self.figure)
-        cm_layout.addWidget(self.canvas)
-        layout.addWidget(colormap_box)
+    @staticmethod
+    def _build_colormap_box(which: str) -> tuple[QGroupBox, Figure, FigureCanvasQTAgg]:
+        box = QGroupBox(f"{which} Color Map (Magnitude vs. Frequency and Field -- auto-updates)")
+        v = QVBoxLayout(box)
+        figure = Figure(figsize=(6, 6))
+        canvas = FigureCanvasQTAgg(figure)
+        v.addWidget(canvas)
+        return box, figure, canvas
 
     def _browse_folder(self) -> None:
         folder = QFileDialog.getExistingDirectory(self, "Select Output Folder", self.output_folder_edit.text())
@@ -103,22 +104,35 @@ class DataTab(QWidget):
         if self.ctx.calibration_manager.points:
             self.ctx.calibration_manager.save_csv(experiment_dir / "calibration" / "calibration.csv")
         self.folder_label.setText(f"Experiment folder: {experiment_dir}")
+        self.refresh_colormaps()
         QMessageBox.information(self, "Experiment Created", f"Experiment folder created:\n{experiment_dir}")
 
-    def _generate_colormap(self, which: str) -> None:
-        result = self.ctx.data_manager.build_colormap(which)
-        if result is None:
-            QMessageBox.warning(self, "No Data", "No measurement data available yet for a color map.")
-            return
-        fields, freqs, matrix = result
-        self.figure.clear()
-        ax = self.figure.add_subplot(111)
-        mesh = ax.pcolormesh(freqs / 1e9, fields, matrix, shading="auto", cmap="viridis")
-        ax.set_xlabel("Frequency (GHz)")
-        ax.set_ylabel("Magnetic field (Oe)")
-        ax.set_title(f"{which} Magnitude (dB)")
-        self.figure.colorbar(mesh, ax=ax, label="Magnitude (dB)")
-        self.canvas.draw()
-        if self.ctx.data_manager.experiment_dir is not None:
-            path = self.ctx.data_manager.experiment_dir / "plots" / f"{which.lower()}_colormap.png"
-            self.figure.savefig(path, dpi=150)
+    def refresh_colormaps(self) -> None:
+        """Redraw the S11/S21 color maps from whatever data exists right
+        now. Called automatically whenever a field point is saved (see
+        MainWindow's cross-tab wiring) -- generation is no longer a
+        manual button; the PNGs on disk (all four S-parameters, in
+        experiment_dir/plots/) are kept up to date by
+        DataManager._export_colormaps() regardless of whether this tab is
+        even open."""
+        for which, figure, canvas in (
+            ("S11", self._s11_figure, self._s11_canvas),
+            ("S21", self._s21_figure, self._s21_canvas),
+        ):
+            figure.clear()
+            ax = figure.add_subplot(111)
+            result = self.ctx.data_manager.build_colormap(which)
+            if result is not None:
+                fields, freqs, matrix = result
+                mesh = ax.pcolormesh(freqs / 1e9, fields, matrix, shading="auto", cmap="viridis")
+                ax.set_xlabel("Frequency (GHz)")
+                ax.set_ylabel("Magnetic field (Oe)")
+                ax.set_title(f"{which} Magnitude (dB)")
+                figure.colorbar(mesh, ax=ax, label="Magnitude (dB)", fraction=0.046, pad=0.04)
+            else:
+                ax.set_xlabel("Frequency (GHz)")
+                ax.set_ylabel("Magnetic field (Oe)")
+                ax.set_title(f"{which} Magnitude (dB) -- no data yet")
+            ax.set_box_aspect(1)
+            figure.tight_layout()
+            canvas.draw()

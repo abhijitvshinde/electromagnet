@@ -227,21 +227,30 @@ class PlotManager:
         title: str,
         png_path: Path | None = None,
         pdf_path: Path | None = None,
-    ):
+    ) -> None:
+        """Render a magnitude-vs-frequency-vs-field colormap and save it.
+
+        Square figure/axes (``set_box_aspect(1)``) regardless of the data's
+        physical units (GHz vs. Oe) -- this is purely a display choice, not
+        a claim that one GHz should look like one Oe.
+        """
         import matplotlib
 
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
-        fig, ax = plt.subplots(figsize=(7.5, 5))
+        fig, ax = plt.subplots(figsize=(7, 7))
         mesh = ax.pcolormesh(freqs / 1e9, fields, matrix_db, shading="auto", cmap="viridis")
         ax.set_xlabel("Frequency (GHz)")
         ax.set_ylabel("Magnetic field (Oe)")
         ax.set_title(title)
-        fig.colorbar(mesh, ax=ax, label="Magnitude (dB)")
+        ax.set_box_aspect(1)
+        fig.colorbar(mesh, ax=ax, label="Magnitude (dB)", fraction=0.046, pad=0.04)
         fig.tight_layout()
         if png_path:
+            png_path.parent.mkdir(parents=True, exist_ok=True)
             fig.savefig(png_path, dpi=150)
         if pdf_path:
+            pdf_path.parent.mkdir(parents=True, exist_ok=True)
             fig.savefig(pdf_path)
-        return fig
+        plt.close(fig)

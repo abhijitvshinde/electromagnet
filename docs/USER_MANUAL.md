@@ -70,8 +70,11 @@ instrument (or just stores it if not yet connected).
 
 Enter experiment/sample/operator metadata and an output folder, then
 **Create Experiment Folder** -- do this before starting a measurement.
-Generates S11/S21 color maps (magnitude vs. frequency and field) once
-data exists.
+Shows S11/S21 color maps (magnitude vs. frequency and field, square
+plots) that update automatically as each field point is measured -- no
+button to click. Color maps for all four S-parameters (S11/S21/S12/S22)
+are saved to `experiment_dir/plots/` the same way, even though only
+S11/S21 are displayed here.
 
 ## 7. Live Measurement
 

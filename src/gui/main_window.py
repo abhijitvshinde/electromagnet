@@ -55,6 +55,7 @@ class MainWindow(QMainWindow):
         self.ctx.safety_manager.max_current_changed.connect(self._on_max_current_set)
 
         self.connection_tab.connections_changed.connect(self.live_tab.refresh_static)
+        self.live_tab.data_saved.connect(self.data_tab.refresh_colormaps)
 
         self.ctx.logger.info("Main window initialized")
 

@@ -86,6 +86,20 @@ def test_save_point_exports_magnitude_graphs_only_no_phase(tmp_path):
         assert not (graphs_dir / name).exists()
 
 
+def test_save_point_exports_colormaps_for_all_four_s_parameters(tmp_path):
+    """Colormaps are saved to disk for all of S11/S21/S12/S22 automatically
+    after every point -- no button click required -- even though the GUI
+    (DataTab) only ever displays S11/S21 live."""
+    dm = DataManager(tmp_path)
+    dm.create_experiment("Exp")
+    dm.save_point(_fake_result(0, 50.0, 0.25))
+    plots_dir = dm.experiment_dir / "plots"
+    for name in ("s11_colormap.png", "s21_colormap.png", "s12_colormap.png", "s22_colormap.png"):
+        path = plots_dir / name
+        assert path.exists(), f"{name} was not exported"
+        assert path.stat().st_size > 0
+
+
 def test_graphs_accumulate_across_points(tmp_path):
     """The exported graph should be regenerated (not merely appended to)
     from every point measured so far -- verified indirectly by checking

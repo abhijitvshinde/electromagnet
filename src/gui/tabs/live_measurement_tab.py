@@ -4,7 +4,7 @@ from __future__ import annotations
 import time
 from datetime import datetime
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTimer, Signal
 from PySide6.QtWidgets import (
     QCheckBox, QDoubleSpinBox, QGridLayout, QGroupBox, QHBoxLayout, QLabel,
     QMessageBox, QProgressBar, QPushButton, QVBoxLayout, QWidget,
@@ -19,6 +19,12 @@ from src.safety.safety_manager import SafetyViolationError
 
 
 class LiveMeasurementTab(QWidget):
+    # Emitted whenever a field point (or background measurement) is saved,
+    # so other tabs (Data tab's color maps) can refresh themselves without
+    # this tab needing to know anything about them -- see MainWindow's
+    # cross-tab wiring, same pattern as ConnectionTab.connections_changed.
+    data_saved = Signal()
+
     def __init__(self, ctx: AppContext) -> None:
         super().__init__()
         self.ctx = ctx
@@ -264,6 +270,7 @@ class LiveMeasurementTab(QWidget):
             # (MEAS:VOLT:DC?) -- NOT a setpoint/compliance ceiling, which
             # is all the front panel may show in some display states.
             self.present_voltage_label.setText(f"Present voltage (actual): {result.actual_voltage_v:.4f} V")
+        self.data_saved.emit()
 
     def _on_error(self, message: str) -> None:
         self.warning_label.setText(message)

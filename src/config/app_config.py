@@ -8,11 +8,26 @@ editing JSON, not Python.
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+def _app_root() -> Path:
+    """Directory config/, assets/, logs/, and state/ live next to.
+
+    In a normal source checkout this is the repository root. Frozen into a
+    PyInstaller build, ``__file__`` instead resolves inside the bundle's
+    temp/internal directory -- use the executable's own directory instead,
+    since that's where those folders are placed alongside the .exe.
+    """
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parents[2]
+
+
+PROJECT_ROOT = _app_root()
 CONFIG_DIR = PROJECT_ROOT / "config"
 
 

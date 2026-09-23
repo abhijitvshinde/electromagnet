@@ -1,16 +1,14 @@
 """Tab 9: About."""
 from __future__ import annotations
 
-from pathlib import Path
-
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
+from src.config.app_config import PROJECT_ROOT
 from src.gui.app_context import AppContext
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
-_LOGO_PATH = _PROJECT_ROOT / "assets" / "ncat_logo.png"
+_LOGO_PATH = PROJECT_ROOT / "assets" / "ncat_logo.png"
 
 
 class AboutTab(QWidget):

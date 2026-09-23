@@ -16,9 +16,7 @@ from pathlib import Path
 import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (
-    QFrame, QGridLayout, QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget,
-)
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget
 
 pg.setConfigOptions(antialias=True, background="w", foreground="k")
 
@@ -28,67 +26,69 @@ _PALETTE = [
     (188, 189, 34), (23, 190, 207),
 ]
 
-_LEGEND_COLUMNS = 10
+_LEGEND_VISIBLE_ROWS = 10  # scroll area height reserved for this many rows
 
 
 class _LegendPanel(QWidget):
-    """A small, fully Qt-native legend: entries wrap into a grid at
-    ``_LEGEND_COLUMNS`` per row, a colored line swatch immediately beside
-    each label. Sits below the plot (see ``_build_slot``), growing into
-    more rows as traces are added rather than shrinking the plot area.
+    """A small, fully Qt-native legend: one row per trace, a colored line
+    swatch immediately beside its label.
 
     This exists instead of pyqtgraph's own ``LegendItem`` because that
     widget only lays out correctly when it floats as an overlay inside a
     ViewBox (the default ``addLegend()`` behavior) -- placed as a
-    standalone item in a ``GraphicsLayout`` instead (to get it genuinely
-    outside the plotting area rather than overlapping the traces), each
-    entry's color swatch rendered UNDER its label instead of beside it. A
-    plain QGridLayout of QHBoxLayout cells has no such surprise: each
-    entry is guaranteed to keep its swatch and text aligned on one line.
+    standalone item in a ``GraphicsLayout`` column instead (to get it
+    genuinely outside the plotting area rather than overlapping the
+    traces), each entry's color swatch rendered UNDER its label instead of
+    beside it. A plain QVBoxLayout of QHBoxLayout rows has no such
+    surprise: each row is guaranteed to keep its swatch and text aligned
+    on the same line.
     """
 
     def __init__(self) -> None:
         super().__init__()
-        self._entries: dict[int, QWidget] = {}
-        self._next_index = 0
-        self._layout = QGridLayout(self)
+        self._rows: dict[int, QWidget] = {}
+        self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(4, 4, 4, 4)
-        self._layout.setHorizontalSpacing(14)
-        self._layout.setVerticalSpacing(2)
+        self._layout.setSpacing(2)
+        self._layout.addStretch(1)
 
     def add_entry(self, trace_id: int, color: tuple[int, int, int], label: str) -> None:
-        entry = QWidget()
-        entry_layout = QHBoxLayout(entry)
-        entry_layout.setContentsMargins(0, 0, 0, 0)
-        entry_layout.setSpacing(6)
+        row = QWidget()
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(6)
         swatch = QFrame()
         swatch.setFixedSize(18, 3)
         swatch.setStyleSheet(f"background-color: rgb{color}; border: none;")
-        entry_layout.addWidget(swatch, 0, Qt.AlignmentFlag.AlignVCenter)
+        row_layout.addWidget(swatch, 0, Qt.AlignmentFlag.AlignVCenter)
         text = QLabel(label)
-        entry_layout.addWidget(text, 0, Qt.AlignmentFlag.AlignVCenter)
-        row, col = divmod(self._next_index, _LEGEND_COLUMNS)
-        self._layout.addWidget(entry, row, col)
-        self._entries[trace_id] = entry
-        self._next_index += 1
+        row_layout.addWidget(text, 0, Qt.AlignmentFlag.AlignVCenter)
+        row_layout.addStretch(1)
+        self._rows[trace_id] = row
+        self._layout.insertWidget(self._layout.count() - 1, row)  # before the trailing stretch
 
     def clear(self) -> None:
-        for entry in self._entries.values():
-            self._layout.removeWidget(entry)
-            entry.deleteLater()
-        self._entries.clear()
-        self._next_index = 0
+        for row in self._rows.values():
+            self._layout.removeWidget(row)
+            row.deleteLater()
+        self._rows.clear()
 
     def set_visible(self, trace_id: int, visible: bool) -> None:
-        entry = self._entries.get(trace_id)
-        if entry is not None:
-            entry.setVisible(visible)
+        row = self._rows.get(trace_id)
+        if row is not None:
+            row.setVisible(visible)
+
+    def row_height_hint(self) -> int:
+        """Height in px of one entry row, used to size the scroll area to
+        ``_LEGEND_VISIBLE_ROWS`` regardless of the platform's font metrics."""
+        probe = QLabel("Hg")
+        return probe.sizeHint().height() + self._layout.spacing()
 
 
 @dataclass
 class _PlotSlot:
     """One live plot (S11/S21/S12/S22 magnitude): the composite widget
-    added to the GUI layout (plot on top, legend below), the pyqtgraph
+    added to the GUI layout (plot and legend side by side), the pyqtgraph
     PlotWidget itself, and the legend panel."""
 
     widget: QWidget
@@ -109,16 +109,21 @@ def _build_slot(title: str, ylabel: str, y_units: str) -> _PlotSlot:
     scroll = QScrollArea()
     scroll.setWidget(legend)
     scroll.setWidgetResizable(True)
-    scroll.setFixedHeight(110)
+    scroll.setFixedWidth(150)
+    # Sized to show _LEGEND_VISIBLE_ROWS entries before a vertical
+    # scrollbar appears, instead of growing to match the plot's height
+    # (which could show far more, or far fewer, than 10 depending on the
+    # window size).
+    scroll.setFixedHeight(legend.row_height_hint() * _LEGEND_VISIBLE_ROWS + 8)
     scroll.setFrameShape(QFrame.Shape.NoFrame)
     scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
     scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
     container = QWidget()
-    layout = QVBoxLayout(container)
+    layout = QHBoxLayout(container)
     layout.setContentsMargins(0, 0, 0, 0)
     layout.addWidget(plot_widget, 5)
-    layout.addWidget(scroll, 0)
+    layout.addWidget(scroll, 1)
 
     return _PlotSlot(widget=container, plot_widget=plot_widget, legend=legend)
 

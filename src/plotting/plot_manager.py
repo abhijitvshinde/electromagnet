@@ -193,14 +193,19 @@ class PlotManager:
         The legend is always placed outside the axes (to the right, via
         ``bbox_to_anchor``) rather than matplotlib's default in-plot
         placement, so it never overlaps the traces no matter how many
-        points are overlaid.
+        points are overlaid. Every trace gets a listed entry -- the figure
+        height grows with the trace count instead of capping the legend,
+        so a saved graph never hides data.
         """
         import matplotlib
 
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
-        fig, ax = plt.subplots(figsize=(8, 4.5))
+        n_traces = len(series)
+        fig_height = max(4.5, 1.5 + 0.25 * n_traces)
+
+        fig, ax = plt.subplots(figsize=(8, fig_height))
         for label, freqs, values in series:
             ax.plot(np.asarray(freqs) / 1e9, values, label=label, linewidth=1.2)
         ax.set_xlabel("Frequency (GHz)")

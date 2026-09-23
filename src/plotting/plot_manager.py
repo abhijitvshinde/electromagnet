@@ -26,6 +26,8 @@ _PALETTE = [
     (188, 189, 34), (23, 190, 207),
 ]
 
+_LEGEND_VISIBLE_ROWS = 10  # scroll area height reserved for this many rows
+
 
 class _LegendPanel(QWidget):
     """A small, fully Qt-native legend: one row per trace, a colored line
@@ -76,11 +78,17 @@ class _LegendPanel(QWidget):
         if row is not None:
             row.setVisible(visible)
 
+    def row_height_hint(self) -> int:
+        """Height in px of one entry row, used to size the scroll area to
+        ``_LEGEND_VISIBLE_ROWS`` regardless of the platform's font metrics."""
+        probe = QLabel("Hg")
+        return probe.sizeHint().height() + self._layout.spacing()
+
 
 @dataclass
 class _PlotSlot:
     """One live plot (S11/S21/S12/S22 magnitude): the composite widget
-    added to the GUI layout (plot + legend side by side), the pyqtgraph
+    added to the GUI layout (plot and legend side by side), the pyqtgraph
     PlotWidget itself, and the legend panel."""
 
     widget: QWidget
@@ -102,8 +110,14 @@ def _build_slot(title: str, ylabel: str, y_units: str) -> _PlotSlot:
     scroll.setWidget(legend)
     scroll.setWidgetResizable(True)
     scroll.setFixedWidth(150)
+    # Sized to show _LEGEND_VISIBLE_ROWS entries before a vertical
+    # scrollbar appears, instead of growing to match the plot's height
+    # (which could show far more, or far fewer, than 10 depending on the
+    # window size).
+    scroll.setFixedHeight(legend.row_height_hint() * _LEGEND_VISIBLE_ROWS + 8)
     scroll.setFrameShape(QFrame.Shape.NoFrame)
     scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
     container = QWidget()
     layout = QHBoxLayout(container)

@@ -240,9 +240,9 @@ class PlotManager:
         import matplotlib.pyplot as plt
 
         fig, ax = plt.subplots(figsize=(7, 7))
-        mesh = ax.pcolormesh(freqs / 1e9, fields, matrix_db, shading="auto", cmap="viridis")
-        ax.set_xlabel("Frequency (GHz)")
-        ax.set_ylabel("Magnetic field (Oe)")
+        mesh = ax.pcolormesh(fields, freqs / 1e9, matrix_db.T, shading="auto", cmap="viridis")
+        ax.set_xlabel("Magnetic field (Oe)")
+        ax.set_ylabel("Frequency (GHz)")
         ax.set_title(title)
         ax.set_box_aspect(1)
         fig.colorbar(mesh, ax=ax, label="Magnitude (dB)", fraction=0.046, pad=0.04)

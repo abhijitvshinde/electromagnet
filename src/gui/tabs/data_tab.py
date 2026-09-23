@@ -124,14 +124,14 @@ class DataTab(QWidget):
             result = self.ctx.data_manager.build_colormap(which)
             if result is not None:
                 fields, freqs, matrix = result
-                mesh = ax.pcolormesh(freqs / 1e9, fields, matrix, shading="auto", cmap="viridis")
-                ax.set_xlabel("Frequency (GHz)")
-                ax.set_ylabel("Magnetic field (Oe)")
+                mesh = ax.pcolormesh(fields, freqs / 1e9, matrix.T, shading="auto", cmap="viridis")
+                ax.set_xlabel("Magnetic field (Oe)")
+                ax.set_ylabel("Frequency (GHz)")
                 ax.set_title(f"{which} Magnitude (dB)")
                 figure.colorbar(mesh, ax=ax, label="Magnitude (dB)", fraction=0.046, pad=0.04)
             else:
-                ax.set_xlabel("Frequency (GHz)")
-                ax.set_ylabel("Magnetic field (Oe)")
+                ax.set_xlabel("Magnetic field (Oe)")
+                ax.set_ylabel("Frequency (GHz)")
                 ax.set_title(f"{which} Magnitude (dB) -- no data yet")
             ax.set_box_aspect(1)
             figure.tight_layout()

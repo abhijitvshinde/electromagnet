@@ -190,62 +190,32 @@ class PlotManager:
         """Render every ``(label, freqs_hz, values)`` trace in ``series``
         onto one static figure and save it.
 
-        The legend is always placed outside the axes (below, via
-        ``bbox_to_anchor``), wrapped at ``LEGEND_COLUMNS`` entries per row,
-        so it never overlaps the plot no matter how many traces are
-        overlaid -- it just grows downward into more rows.
-
-        The bottom margin is reserved explicitly via ``tight_layout(rect=...)``
-        (mirroring how the original right-side legend reserved a fixed
-        fraction of the figure) rather than via ``savefig(bbox_inches="tight")``.
-        The latter expands the *saved canvas* to fit the legend without
-        resizing the axes to match, which -- for a legend wide enough to
-        need more horizontal room than the figure's own width (common at
-        ``LEGEND_COLUMNS=10``) -- left the plot rendered small in a corner
-        of a much wider, mostly-blank image.
+        The legend is always placed outside the axes (to the right, via
+        ``bbox_to_anchor``) rather than matplotlib's default in-plot
+        placement, so it never overlaps the traces no matter how many
+        points are overlaid. Every trace gets a listed entry -- the figure
+        height grows with the trace count instead of capping the legend,
+        so a saved graph never hides data.
         """
-        import math
-
         import matplotlib
 
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
-        LEGEND_COLUMNS = 10
-        LEGEND_FONTSIZE = 6.75  # 25% smaller than the prior "small" (~9pt), kept legible
         n_traces = len(series)
-        legend_rows = max(1, math.ceil(n_traces / LEGEND_COLUMNS))
-        # Wide enough for LEGEND_COLUMNS columns of a label like
-        # "H=1234.00 Oe" at LEGEND_FONTSIZE without wrapping/clipping.
-        fig_width = 16.0
-        # Figure-fraction bottom margin for the x-axis label plus
-        # legend_rows rows of legend -- figure-fraction throughout (see
-        # below) so this lines up exactly with where the legend is placed,
-        # unlike axes-fraction bbox_to_anchor + figure-fraction rect, which
-        # don't share a coordinate system and drift out of sync.
-        bottom_margin = 0.12 + 0.05 * legend_rows
-        fig_height = 5.5 + 0.3 * legend_rows
+        fig_height = max(4.5, 1.5 + 0.25 * n_traces)
 
-        fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+        fig, ax = plt.subplots(figsize=(8, fig_height))
         for label, freqs, values in series:
             ax.plot(np.asarray(freqs) / 1e9, values, label=label, linewidth=1.2)
         ax.set_xlabel("Frequency (GHz)")
         ax.set_ylabel(ylabel)
         ax.set_title(title)
         ax.grid(True, alpha=0.3)
-        fig.subplots_adjust(left=0.07, right=0.98, top=0.93, bottom=bottom_margin)
-        if n_traces:
-            handles, labels = ax.get_legend_handles_labels()
-            fig.legend(
-                handles, labels,
-                loc="lower center",
-                bbox_to_anchor=(0.5, 0.02),
-                ncol=min(LEGEND_COLUMNS, n_traces),
-                fontsize=LEGEND_FONTSIZE,
-                columnspacing=1.0,
-                handlelength=1.5,
-                handletextpad=0.4,
-            )
+        ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), fontsize="small", borderaxespad=0.0)
+        # Reserve the right ~18% of the figure for the legend so
+        # tight_layout doesn't shrink it back under the axes.
+        fig.tight_layout(rect=(0.0, 0.0, 0.82, 1.0))
         if png_path:
             png_path.parent.mkdir(parents=True, exist_ok=True)
             fig.savefig(png_path, dpi=150)

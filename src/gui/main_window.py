@@ -1,4 +1,4 @@
-"""Main application window: ties the nine tabs together and enforces the
+"""Main application window: ties the ten tabs together and enforces the
 mandatory safe-shutdown sequence when the application is closed while a
 process is active or the power-supply output is enabled.
 """
@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QMainWindow, QMessageBox, QTabWidget
 
 from src.gui.app_context import AppContext
 from src.gui.tabs.about_tab import AboutTab
+from src.gui.tabs.background_tab import BackgroundComparisonTab
 from src.gui.tabs.calibration_tab import CalibrationTab
 from src.gui.tabs.connection_tab import ConnectionTab
 from src.gui.tabs.data_tab import DataTab
@@ -36,6 +37,7 @@ class MainWindow(QMainWindow):
         self.vna_settings_tab = VNASettingsTab(self.ctx)
         self.live_tab = LiveMeasurementTab(self.ctx)
         self.data_tab = DataTab(self.ctx)
+        self.background_tab = BackgroundComparisonTab(self.ctx)
         self.log_tab = LogTab(self.ctx)
         self.about_tab = AboutTab(self.ctx)
 
@@ -48,6 +50,10 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.live_tab, "7. Live Measurement")
         self.tabs.addTab(self.log_tab, "8. Event Log")
         self.tabs.addTab(self.about_tab, "9. About")
+        # Appended after the existing 9 tabs (rather than inserted in
+        # sequence) so it doesn't renumber any of them -- docs/USER_MANUAL.md
+        # and its screenshots reference tabs 1-9 by their current numbers.
+        self.tabs.addTab(self.background_tab, "10. Background Comparison")
         self.setCentralWidget(self.tabs)
 
         # Every tab except Safety, the Event Log, and About requires the
@@ -59,6 +65,7 @@ class MainWindow(QMainWindow):
 
         self.connection_tab.connections_changed.connect(self.live_tab.refresh_static)
         self.live_tab.data_saved.connect(self.data_tab.refresh_colormaps)
+        self.live_tab.data_saved.connect(self.background_tab.refresh)
 
         self.ctx.logger.info("Main window initialized")
 

@@ -369,6 +369,7 @@ class LiveMeasurementTab(QWidget):
         finally:
             self.background_btn.setEnabled(True)
 
+        self.data_saved.emit()
         QMessageBox.information(self, "Background Measurement Saved", f"Saved to:\n{path}")
 
     def _emergency_stop(self) -> None:

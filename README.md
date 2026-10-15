@@ -2,7 +2,7 @@
 
 Windows desktop application for controlling an electromagnet power
 supply and a Vector Network Analyzer over GPIB, running automated
-magnetic-field sweeps, measuring S11/S21, plotting live, and saving all
+magnetic-field sweeps, measuring S11/S21/S12/S22, plotting live, and saving all
 measurement data. Built for electromagnet equipment **YP180829-188-2**.
 
 A hard maximum-current safety limit is mandatory and enforced centrally
@@ -29,7 +29,7 @@ src/
                  color-map figure export
   logging_/      ExperimentLogger -- app + per-experiment log files, Qt
                  signal bridge to the Event Log tab
-  gui/           AppContext (shared state) + MainWindow + 8 tabs
+  gui/           AppContext (shared state) + MainWindow + 9 tabs
 config/          power_supply_profiles.json, vna_profiles.json (SCPI
                  command PLACEHOLDERS -- see docs/SCPI_REPLACEMENT_GUIDE.md),
                  app_settings.json (GPIB addresses, ramp defaults, ...)
@@ -118,7 +118,7 @@ smoke test of the whole pipeline.
 
 ## Further reading
 
-- `docs/USER_MANUAL.md` -- what each of the 8 tabs does
+- `docs/USER_MANUAL.md` -- step-by-step GUI manual for all 9 tabs, with screenshots
 - `docs/GPIB_ADDRESS_GUIDE.md` -- finding your instruments' VISA/GPIB addresses
 - `docs/SCPI_REPLACEMENT_GUIDE.md` -- replacing the placeholder SCPI commands for your real instruments
 - `docs/PACKAGING.md` -- building a standalone Windows executable with PyInstaller

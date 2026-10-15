@@ -144,7 +144,7 @@ configure voltage monitoring.
 
 | Control | What it does |
 |---------|--------------|
-| **Maximum current (A)** | The absolute ceiling. Every commanded current, in every tab, must satisfy `|I| <= this value`. |
+| **Maximum current (A)** | The absolute ceiling. Every commanded current, in every tab, must not exceed this value in magnitude (positive or negative). |
 | **Set / Confirm Maximum Current** | Stores the limit and unlocks tabs 2-7. If the power supply is already connected it also writes the same limit to the instrument's own current limit (best-effort). |
 
 The status line shows `Current limit: ±2.0000 A`, or `NOT SET (mandatory)`
@@ -731,7 +731,7 @@ group named `background`.
 | **A** | Ampere -- the coil current. |
 | **S11, S22** | Reflection coefficients at VNA port 1 / port 2. |
 | **S21, S12** | Transmission coefficients port 1 -> 2 / port 2 -> 1. |
-| **dB** | Decibels; magnitude plots show `20·log10(|S|)`. |
+| **dB** | Decibels; magnitude plots show 20·log10 of the linear magnitude of S. |
 | **IFBW** | Intermediate-frequency bandwidth of the VNA receiver. |
 | **Compliance voltage** | The voltage ceiling of a constant-current supply; the supply raises its voltage up to this limit to push the commanded current through the coil. |
 | **OVP / OCP** | The instrument's over-voltage / over-current protection circuits. |

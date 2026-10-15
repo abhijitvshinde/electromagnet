@@ -118,7 +118,7 @@ smoke test of the whole pipeline.
 
 ## Further reading
 
-- `docs/USER_MANUAL.md` -- step-by-step GUI manual for all 9 tabs, with screenshots
+- `docs/USER_MANUAL.md` -- step-by-step GUI manual for all 9 tabs, with screenshots (PDF copy: `docs/USER_MANUAL.pdf`; rebuild it with `python scripts/build_manual_pdf.py`, needs `pip install markdown-it-py` and Chrome or Edge)
 - `docs/GPIB_ADDRESS_GUIDE.md` -- finding your instruments' VISA/GPIB addresses
 - `docs/SCPI_REPLACEMENT_GUIDE.md` -- replacing the placeholder SCPI commands for your real instruments
 - `docs/PACKAGING.md` -- building a standalone Windows executable with PyInstaller

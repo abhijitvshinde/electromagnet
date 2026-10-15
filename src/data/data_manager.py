@@ -63,10 +63,29 @@ class DataManager:
         # _combined_rows (which is flat, per-frequency-point data for CSV
         # export) since these need whole arrays grouped by measurement point.
         self._point_summaries: list[dict[str, Any]] = []
+        # Same shape as one entry of _point_summaries, for whatever 0A
+        # background/reference measurement was last saved via
+        # save_background() -- None until one has been taken. Used by the
+        # Background Comparison tab to subtract it from the field-sweep
+        # traces; not touched by anything that talks to the instruments.
+        self._background_summary: dict[str, Any] | None = None
 
     def _log(self, msg: str, level: str = "info") -> None:
         if self._logger is not None:
             getattr(self._logger, level, self._logger.info)(msg)
+
+    @property
+    def point_summaries(self) -> list[dict[str, Any]]:
+        """Read-only view of the per-point magnitude summaries measured so
+        far in this experiment (label, freqs, and sXX_magnitude_db arrays)."""
+        return list(self._point_summaries)
+
+    @property
+    def background_summary(self) -> dict[str, Any] | None:
+        """The last-saved 0A background/reference measurement, in the same
+        shape as one entry of point_summaries, or None if none has been
+        measured for this experiment yet."""
+        return self._background_summary
 
     # ------------------------------------------------------------------
     def create_experiment(
@@ -86,6 +105,7 @@ class DataManager:
 
         self._combined_rows = []
         self._point_summaries = []
+        self._background_summary = None
         self._metadata = {
             "experiment_name": experiment_name,
             "sample_name": sample_name,
@@ -317,6 +337,12 @@ class DataManager:
                 if s is not None:
                     grp.create_dataset(f"{key}_real", data=s.real)
                     grp.create_dataset(f"{key}_imag", data=s.imag)
+
+        summary: dict[str, Any] = {"label": "Background (0A)", "freqs": freqs}
+        for key in ("s11", "s21", "s12", "s22"):
+            s = getattr(point, key)
+            summary[f"{key}_magnitude_db"] = s.magnitude_db if s is not None else None
+        self._background_summary = summary
 
         self._log(f"Saved background measurement (I={point.current_a:.6f} A) -> {csv_path}")
         return csv_path

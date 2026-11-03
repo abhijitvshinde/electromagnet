@@ -100,6 +100,70 @@ def test_save_point_exports_colormaps_for_all_four_s_parameters(tmp_path):
         assert path.stat().st_size > 0
 
 
+def test_colormap_background_subtracted_not_exported_without_a_background(tmp_path):
+    """Only the raw colormaps exist until a background (0A) measurement
+    has actually been saved -- no background-subtracted file should appear
+    (and build_colormap(subtract_background=True) should return None)."""
+    dm = DataManager(tmp_path)
+    dm.create_experiment("Exp")
+    dm.save_point(_fake_result(0, 50.0, 0.25))
+    plots_dir = dm.experiment_dir / "plots"
+    for name in (
+        "s11_colormap_background_subtracted.png", "s21_colormap_background_subtracted.png",
+        "s12_colormap_background_subtracted.png", "s22_colormap_background_subtracted.png",
+    ):
+        assert not (plots_dir / name).exists()
+    assert dm.build_colormap("S11", subtract_background=True) is None
+
+
+def test_colormap_background_subtracted_exported_for_all_four_s_parameters(tmp_path):
+    dm = DataManager(tmp_path)
+    dm.create_experiment("Exp")
+    dm.save_point(_fake_result(0, 50.0, 0.25))
+    dm.save_background(_fake_result(-1, 0.0, 0.0))
+    plots_dir = dm.experiment_dir / "plots"
+    for name in (
+        "s11_colormap_background_subtracted.png", "s21_colormap_background_subtracted.png",
+        "s12_colormap_background_subtracted.png", "s22_colormap_background_subtracted.png",
+    ):
+        path = plots_dir / name
+        assert path.exists(), f"{name} was not exported"
+        assert path.stat().st_size > 0
+
+
+def test_colormap_background_subtraction_math(tmp_path):
+    """The background-subtracted matrix should be exactly the raw matrix
+    minus the background's magnitude_db, elementwise by frequency."""
+    dm = DataManager(tmp_path)
+    dm.create_experiment("Exp")
+    dm.save_point(_fake_result(0, 50.0, 0.25))
+    dm.save_background(_fake_result(-1, 0.0, 0.0))
+
+    raw_fields, raw_freqs, raw_matrix = dm.build_colormap("S11")
+    bg_fields, bg_freqs, bg_matrix = dm.build_colormap("S11", subtract_background=True)
+
+    assert np.array_equal(raw_fields, bg_fields)
+    assert np.array_equal(raw_freqs, bg_freqs)
+    bg_db = dm.background_summary["s11_magnitude_db"]
+    expected = raw_matrix - bg_db[np.newaxis, :]
+    assert np.allclose(bg_matrix, expected)
+
+
+def test_background_measured_after_points_still_exports_subtracted_colormaps(tmp_path):
+    """Taking the background AFTER field points were already measured
+    should regenerate the background-subtracted colormaps immediately,
+    not leave them missing until another point happens to be saved."""
+    dm = DataManager(tmp_path)
+    dm.create_experiment("Exp")
+    dm.save_point(_fake_result(0, 50.0, 0.25))
+    dm.save_point(_fake_result(1, 100.0, 0.5))
+    plots_dir = dm.experiment_dir / "plots"
+    assert not (plots_dir / "s11_colormap_background_subtracted.png").exists()
+
+    dm.save_background(_fake_result(-1, 0.0, 0.0))
+    assert (plots_dir / "s11_colormap_background_subtracted.png").exists()
+
+
 def test_graphs_accumulate_across_points(tmp_path):
     """The exported graph should be regenerated (not merely appended to)
     from every point measured so far -- verified indirectly by checking

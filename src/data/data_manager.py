@@ -246,19 +246,36 @@ class DataManager:
         experiment_dir/plots/. Saved for all of S11/S21/S12/S22, refreshed
         after every point -- the GUI (Data tab) only displays S11/S21
         live, but S12/S22 are still written to disk here for later
-        analysis."""
+        analysis.
+
+        Also saves a second, background-subtracted colormap per
+        S-parameter alongside the raw one, whenever a background (0A)
+        measurement has been saved for this experiment -- see
+        build_colormap(subtract_background=True). Called again from
+        save_background() too, so taking the background after some/all
+        field points doesn't leave these missing until another point
+        happens to be measured."""
         if self.experiment_dir is None:
             return
+        plots_dir = self.experiment_dir / "plots"
         for which in ("S11", "S21", "S12", "S22"):
             result = self.build_colormap(which)
-            if result is None:
-                continue
-            fields, freqs, matrix = result
-            PlotManager.render_colormap_figure(
-                fields, freqs, matrix,
-                title=f"{which} Magnitude (dB)",
-                png_path=self.experiment_dir / "plots" / f"{which.lower()}_colormap.png",
-            )
+            if result is not None:
+                fields, freqs, matrix = result
+                PlotManager.render_colormap_figure(
+                    fields, freqs, matrix,
+                    title=f"{which} Magnitude (dB)",
+                    png_path=plots_dir / f"{which.lower()}_colormap.png",
+                )
+
+            bg_result = self.build_colormap(which, subtract_background=True)
+            if bg_result is not None:
+                fields, freqs, matrix = bg_result
+                PlotManager.render_colormap_figure(
+                    fields, freqs, matrix,
+                    title=f"{which} Magnitude (dB, background-subtracted)",
+                    png_path=plots_dir / f"{which.lower()}_colormap_background_subtracted.png",
+                )
 
     def _append_hdf5(self, point: MeasurementPointResult, freqs: np.ndarray) -> None:
         if self.experiment_dir is None:
@@ -343,13 +360,30 @@ class DataManager:
             s = getattr(point, key)
             summary[f"{key}_magnitude_db"] = s.magnitude_db if s is not None else None
         self._background_summary = summary
+        # Regenerate colormaps now too -- if field points were already
+        # measured before this background was taken, their background-
+        # subtracted heatmaps would otherwise stay missing until another
+        # point happened to be saved.
+        self._export_colormaps()
 
         self._log(f"Saved background measurement (I={point.current_a:.6f} A) -> {csv_path}")
         return csv_path
 
     # ------------------------------------------------------------------
-    def build_colormap(self, which: str) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
-        """Return (fields, frequencies, magnitude_db) for an S11/S21 colormap."""
+    def build_colormap(
+        self, which: str, subtract_background: bool = False
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+        """Return (fields, frequencies, magnitude_db) for an S11/S21/S12/S22
+        colormap.
+
+        If subtract_background is True, the experiment's saved 0A
+        background measurement is subtracted from every row (elementwise
+        in dB, matched by frequency) -- None is returned instead of a
+        matrix if no background has been measured yet, or if its frequency
+        grid doesn't line up exactly with the field sweep's (both are
+        normally measured with the same VNA sweep config within one
+        experiment, so this is only a safety check, not an interpolation).
+        """
         if not self._combined_rows:
             return None
         combined = pd.concat(self._combined_rows, ignore_index=True)
@@ -360,6 +394,20 @@ class DataManager:
         fields = pivot.index.to_numpy()
         freqs = pivot.columns.to_numpy()
         matrix = pivot.to_numpy()
+
+        if subtract_background:
+            if self._background_summary is None:
+                return None
+            bg_db = self._background_summary.get(mag_col)
+            bg_freqs = self._background_summary.get("freqs")
+            if bg_db is None or bg_freqs is None:
+                return None
+            bg_series = pd.Series(np.asarray(bg_db), index=np.asarray(bg_freqs))
+            bg_aligned = bg_series.reindex(freqs)
+            if bg_aligned.isna().any():
+                return None
+            matrix = matrix - bg_aligned.to_numpy()[np.newaxis, :]
+
         return fields, freqs, matrix
 
     def finalize(self) -> None:

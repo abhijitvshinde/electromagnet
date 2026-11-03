@@ -16,7 +16,12 @@ Engineering, North Carolina A&T State University, Greensboro, NC, USA.
 ## Contents
 
 1. [What the application does](#1-what-the-application-does)
-2. [Starting the application](#2-starting-the-application)
+2. [Installing and starting the application](#2-installing-and-starting-the-application)
+   - [2.1 What you need](#21-what-you-need)
+   - [2.2 Download the tool](#22-download-the-tool)
+   - [2.3 Install (one time)](#23-install-one-time)
+   - [2.4 Start the application](#24-start-the-application)
+   - [2.5 Update to a newer version](#25-update-to-a-newer-version)
 3. [Hardware connections](#3-hardware-connections)
    - [3.1 What connects to what](#31-what-connects-to-what)
    - [3.2 VNA rear panel](#32-vna-rear-panel-keysight-n5242b)
@@ -67,22 +72,100 @@ current command in the program. There is no override (see
 
 ---
 
-## 2. Starting the application
+## 2. Installing and starting the application
 
-From the project folder, with the project's virtual environment active:
+The tool is a Python program. It is distributed as source code on GitHub (there
+is no ready-made installer to download), so you download it, install its
+packages once, and then start it with one command.
 
-```bash
-python -m src.main
+### 2.1 What you need
+
+| Item | Notes |
+|------|-------|
+| Windows PC | The application is built and tested on Windows. |
+| **Python 3.10 or newer** | From [python.org](https://www.python.org/downloads/) (developed on 3.13). During installation tick **Add python.exe to PATH**. Check with `python --version`. |
+| Internet connection | Only for the download and the one-time package install. |
+| **Git** (optional) | Makes downloading and updating easier. Without it you can download a ZIP file instead. |
+| **NI-VISA with NI-488.2** (real hardware only) | The driver for the NI GPIB-USB-HS adapter. Not needed for Simulation Mode. See [Hardware connections](#3-hardware-connections). |
+
+### 2.2 Download the tool
+
+The code is at **https://github.com/abhijitvshinde/electromagnet** (public).
+Use either way:
+
+**With Git** -- open PowerShell where you want the folder and run:
+
+```powershell
+git clone https://github.com/abhijitvshinde/electromagnet.git
+cd electromagnet
 ```
 
-(If you were given a packaged `ElectromagnetVNAControl.exe`, just
-double-click it. See `docs/PACKAGING.md` for how it is built.)
+**Without Git** -- download
+<https://github.com/abhijitvshinde/electromagnet/archive/refs/heads/main.zip>
+(or on the GitHub page click **Code -> Download ZIP**), unzip it, and open
+PowerShell inside the unzipped folder (in File Explorer: click the folder's
+address bar, type `powershell`, press Enter).
+
+### 2.3 Install (one time)
+
+Inside the project folder, create a private Python environment and install the
+required packages (PySide6, PyVISA, pyqtgraph, numpy, pandas, scipy, h5py,
+matplotlib):
+
+```powershell
+python -m venv .venv
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+`.venv\Scripts\python.exe` is the Python inside that private environment.
+Using it directly means you never have to "activate" the environment (which
+PowerShell can block with a "running scripts is disabled" message).
+
+Optional self-check -- run the automated tests (about a minute; all should
+pass):
+
+```powershell
+.venv\Scripts\python.exe -m pytest -q
+```
+
+### 2.4 Start the application
+
+From the project folder, every time:
+
+```powershell
+.venv\Scripts\python.exe -m src.main
+```
+
+(If you prefer, activate the environment first with
+`.venv\Scripts\Activate.ps1`; then `python -m src.main` does the same thing.)
+
+A window titled **Electromagnet & VNA Control** opens on the Safety tab. Run it
+from the project folder: the program reads its settings from `config/` and
+writes its logs, saved state and (by default) your experiment data to `logs/`,
+`state/` and `experiments/` inside that folder.
 
 The application starts in **Simulation Mode**: instruments are simulated in
 software, so nothing real is driven. This is the safe way to learn the
 program or to check a sweep before running it on the magnet. To use the real
 hardware, see [Hardware connections](#3-hardware-connections) and
 [Tab 2](#tab-2----instrument-connection).
+
+(A standalone `ElectromagnetVNAControl.exe` can be built with PyInstaller --
+see `docs/PACKAGING.md`. It is not provided on GitHub.)
+
+### 2.5 Update to a newer version
+
+With Git, from the project folder:
+
+```powershell
+git pull
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+(the second line matters only if the list of packages changed). Without Git,
+download the ZIP again into a new folder; to keep your old data, copy the old
+`experiments/` folder across (and `state/` if you want to keep your saved coil
+resistance).
 
 ---
 
@@ -221,7 +304,8 @@ Safety, Event Log and About are always available.
 
 ## 5. Quick start: a complete experiment in 10 steps
 
-Use Simulation Mode first. Each step names the tab.
+First [download, install and start](#2-installing-and-starting-the-application)
+the application. Use Simulation Mode first. Each step names the tab.
 
 1. **Safety** -- enter the maximum allowable current (e.g. `2.0` A) and click
    **Set / Confirm Maximum Current**. The other tabs unlock.

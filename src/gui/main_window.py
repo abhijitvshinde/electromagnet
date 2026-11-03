@@ -48,18 +48,15 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.vna_settings_tab, "5. VNA Settings")
         self.tabs.addTab(self.data_tab, "6. Data && Experiment")
         self.tabs.addTab(self.live_tab, "7. Live Measurement")
-        self.tabs.addTab(self.log_tab, "8. Event Log")
-        self.tabs.addTab(self.about_tab, "9. About")
-        # Appended after the existing 9 tabs (rather than inserted in
-        # sequence) so it doesn't renumber any of them -- docs/USER_MANUAL.md
-        # and its screenshots reference tabs 1-9 by their current numbers.
-        self.tabs.addTab(self.background_tab, "10. Background Comparison")
+        self.tabs.addTab(self.background_tab, "8. Background Comparison")
+        self.tabs.addTab(self.log_tab, "9. Event Log")
+        self.tabs.addTab(self.about_tab, "10. About")
         self.setCentralWidget(self.tabs)
 
         # Every tab except Safety, the Event Log, and About requires the
         # mandatory maximum-current limit to be configured first.
         for i in range(self.tabs.count()):
-            if i not in (0, 7, 8):
+            if i not in (0, 8, 9):
                 self.tabs.setTabEnabled(i, False)
         self.ctx.safety_manager.max_current_changed.connect(self._on_max_current_set)
 

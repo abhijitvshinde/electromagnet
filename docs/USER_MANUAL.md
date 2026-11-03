@@ -27,8 +27,9 @@ Engineering, North Carolina A&T State University, Greensboro, NC, USA.
    - [Tab 5 -- VNA Settings](#tab-5----vna-settings)
    - [Tab 6 -- Data & Experiment](#tab-6----data--experiment)
    - [Tab 7 -- Live Measurement](#tab-7----live-measurement)
-   - [Tab 8 -- Event Log](#tab-8----event-log)
-   - [Tab 9 -- About](#tab-9----about)
+   - [Tab 8 -- Background Comparison](#tab-8----background-comparison)
+   - [Tab 9 -- Event Log](#tab-9----event-log)
+   - [Tab 10 -- About](#tab-10----about)
 6. [Stopping, aborting and emergencies](#6-stopping-aborting-and-emergencies)
 7. [Where your data goes](#7-where-your-data-goes)
 8. [Troubleshooting](#8-troubleshooting)
@@ -51,6 +52,8 @@ GPIB and automates the whole measurement:
 3. It plots the results live, saves every point to disk the moment it is
    measured, and keeps color maps (magnitude vs. field and frequency) up to
    date automatically.
+4. It can take a zero-field (0 A) **background** measurement and show or
+   export your data with that background subtracted.
 
 A **maximum-current limit** that you set first is enforced on every single
 current command in the program. There is no override (see
@@ -78,7 +81,7 @@ hardware, see [Tab 2](#tab-2----instrument-connection).
 
 ## 3. Window layout and the tab order
 
-The window has nine tabs across the top. They are numbered in the order you
+The window has ten tabs across the top. They are numbered in the order you
 normally use them, left to right:
 
 | # | Tab | Purpose |
@@ -90,13 +93,14 @@ normally use them, left to right:
 | 5 | VNA Settings | Frequency range, power, bandwidth, which S-parameters |
 | 6 | Data & Experiment | Name the experiment, create its folder, see the color maps |
 | 7 | Live Measurement | Run the sweep; live plots; background measurement; stop buttons |
-| 8 | Event Log | Running log of everything the program does |
-| 9 | About | Credits |
+| 8 | Background Comparison | View the sweep raw, or with the 0 A background subtracted |
+| 9 | Event Log | Running log of everything the program does |
+| 10 | About | Credits |
 
-**Tabs 2-7 are greyed out until you set the maximum current on tab 1.**
+**Tabs 2-8 are greyed out until you set the maximum current on tab 1.**
 Safety, Event Log and About are always available.
 
-![Safety tab before the limit is set: tabs 2-7 are locked](images/01a_safety_locked.png)
+![Safety tab before the limit is set: tabs 2-8 are locked](images/01a_safety_locked.png)
 
 ---
 
@@ -122,12 +126,16 @@ Use Simulation Mode first. Each step names the tab.
 7. **Data & Experiment** -- type an experiment name, sample name and
    operator, then click **Create Experiment Folder**.
 8. **Live Measurement** -- optionally click **Measure Background (0A)** to
-   save a zero-field reference.
+   save a zero-field reference. (It is what the Background Comparison tab
+   and the background-subtracted color maps use; you can take it before or
+   after the sweep.)
 9. **Live Measurement** -- click **Start Measurement** and confirm. Watch
    the four S-parameter plots fill in.
 10. When the "Measurement Finished" box appears, your data is already in the
     experiment folder (path shown on the Data tab and in the Live status
-    panel). The output is ramped to 0 A and disabled automatically.
+    panel). The output is ramped to 0 A and disabled automatically. Open
+    **Background Comparison** (tab 8) to view the sweep with and without the
+    background subtracted.
 
 ---
 
@@ -145,7 +153,7 @@ configure voltage monitoring.
 | Control | What it does |
 |---------|--------------|
 | **Maximum current (A)** | The absolute ceiling. Every commanded current, in every tab, must not exceed this value in magnitude (positive or negative). |
-| **Set / Confirm Maximum Current** | Stores the limit and unlocks tabs 2-7. If the power supply is already connected it also writes the same limit to the instrument's own current limit (best-effort). |
+| **Set / Confirm Maximum Current** | Stores the limit and unlocks tabs 2-8. If the power supply is already connected it also writes the same limit to the instrument's own current limit (best-effort). |
 
 The status line shows `Current limit: ±2.0000 A`, or `NOT SET (mandatory)`
 until you confirm one. A current command above the limit is *rejected*, not
@@ -230,6 +238,30 @@ reconnect** to apply a change.
 On connecting the power supply, the app also sends your maximum current as the
 instrument's hardware current limit and re-applies the compliance voltage
 from tab 1 (see above).
+
+#### Physical connections (rear panels)
+
+Both instruments are controlled over **GPIB** from a single USB-GPIB adapter
+on the PC (an **NI GPIB-USB-HS** in this setup), so they share one bus,
+`GPIB0`:
+
+- **Power supply -- Agilent E3634A.** This is the unit the application
+  drives. An Agilent E3631A sits next to it in the rack; the application does
+  not use it, but it is on the same GPIB bus, so its address must differ
+  from the other instruments'.
+- **VNA -- Keysight N5242B (PNA-X).** Plug the GPIB cable into
+  **GPIB (1) TALKER/LISTENER** on the rear panel. Do **not** use
+  **GPIB (0) CONTROLLER**: that port lets the VNA control *other*
+  instruments; it is not the port a PC uses to control the VNA.
+- GPIB cables can be daisy-chained in any order, but every instrument on the
+  bus needs a **unique GPIB address**. Set it from the instrument's own menu;
+  it must match the address typed on this tab (defaults: power supply `3`,
+  VNA `16`).
+- The PC needs the VISA/GPIB driver for the adapter (NI-VISA with NI-488.2
+  for the NI adapter). The instruments should be listed under `GPIB0` in
+  NI MAX -- see `docs/GPIB_ADDRESS_GUIDE.md`.
+- Power both instruments on, and let the VNA finish booting, before you click
+  **Connect**.
 
 ---
 
@@ -434,7 +466,7 @@ the instrument itself before the experiment.
 
 ### Tab 6 -- Data & Experiment
 
-![Data & Experiment tab after a run: S11 and S21 color maps](images/06b_data_after_run.png)
+![Data & Experiment tab after a run: S11 and S21 color maps](images/06_data_after_run.png)
 
 **Purpose:** name the experiment, create its folder, and see the field-vs-
 frequency color maps build up.
@@ -468,7 +500,19 @@ they read "no data yet".
 
 Color maps for **all four** S-parameters (S11, S21, S12, S22) are saved to
 the experiment's `plots/` folder as they update, even though only S11 and
-S21 are shown on screen.
+S21 are shown on screen. The two maps shown here are always the raw
+(uncorrected) ones.
+
+Once a **background (0 A)** measurement exists for the experiment (see
+[Tab 7](#tab-7----live-measurement)), the program also saves a
+**background-subtracted** color map for each S-parameter, named
+`<sparam>_colormap_background_subtracted.png`. Each row of the map has the
+background magnitude subtracted from it, in dB. These files are rewritten
+whenever a point is saved *and* whenever the background is saved, so it makes
+no difference whether you measure the background before or after the sweep.
+The background must have been measured with the same VNA sweep settings as
+the sweep; if its frequency points do not line up, no subtracted map is
+written.
 
 ---
 
@@ -535,13 +579,15 @@ sweep:
 3. It saves them to `background/background.csv` and as a `background` group
    in the HDF5 file.
 
-It does **not** disturb the field-sweep data, color maps or cumulative
-graphs. It needs both instruments connected, an experiment folder, and a
-configured VNA, and cannot be used while a sweep is running. The output is
-left enabled at 0 A afterwards.
+It does **not** change the field-sweep data or the raw graphs and color maps.
+It needs both instruments connected, an experiment folder, and a configured
+VNA, and cannot be used while a sweep is running. The output is left enabled
+at 0 A afterwards.
 
-Typical use: measure it once, before the sweep, so you can later subtract
-or normalise the field data against it.
+The background is what the **Background Comparison** tab (tab 8) and the
+background-subtracted color maps are built from. Saving it refreshes both
+immediately. Typical use: measure it once with the same VNA settings as the
+sweep -- before or after the sweep, either order works.
 
 #### Start Measurement
 
@@ -582,9 +628,53 @@ At the end it ramps to 0 A, disables the output, and shows
 
 ---
 
-### Tab 8 -- Event Log
+### Tab 8 -- Background Comparison
 
-![Event Log tab during/after a run](images/08_event_log.png)
+![Background Comparison tab with background subtraction switched on](images/08_background_comparison.png)
+
+**Purpose:** compare your field sweep with and without the 0 A background
+removed, without leaving the program.
+
+The tab shows the same four plots as Live Measurement -- **S11, S21, S12 and
+S22** magnitude (dB) versus frequency (GHz), one trace per field point, with a
+legend beside each plot -- but built from the data already saved for the
+current experiment. It only displays data: it never talks to the instruments
+and never starts a measurement.
+
+| Control | What it does |
+|---------|--------------|
+| **Subtract background (0A measurement)** | Unchecked: raw magnitudes, exactly as measured. Checked: the background trace is subtracted from every trace, frequency point by frequency point, in dB -- i.e. each trace is divided by the 0 A reference in linear terms. |
+| Status line | Says what is being shown, or why you are seeing something else (see below). |
+
+Status messages:
+
+- *No field-sweep data measured yet for this experiment.* -- nothing to show.
+- *Showing raw (uncorrected) data.* -- the box is unchecked.
+- *Showing each trace minus the background (0A) measurement.* -- subtraction
+  is active.
+- *No background (0A) measurement saved for this experiment -- showing raw
+  data instead ...* -- you ticked the box but no background exists yet. Go to
+  Live Measurement, click **Measure Background (0A)**, then tick the box again.
+
+Notes:
+
+- The plots redraw automatically whenever a point or the background is saved,
+  and whenever you tick or untick the box.
+- Every trace is kept (overlay). There is no Clear button -- the tab always
+  reflects the whole current experiment.
+- A trace whose number of frequency points differs from the background's is
+  shown uncorrected, even with the box ticked. Measure the background with the
+  same VNA settings as the sweep.
+- The tab uses the data held in memory for the experiment of the current
+  session; it does not load earlier experiment folders from disk.
+- These line plots are for viewing and are not exported. The
+  background-subtracted *color maps* are -- see [Tab 6](#tab-6----data--experiment).
+
+---
+
+### Tab 9 -- Event Log
+
+![Event Log tab during/after a run](images/09_event_log.png)
 
 A read-only, live list of everything the program does: connections, every
 current command, saved points, pauses/aborts/emergency stops, warnings and
@@ -598,9 +688,9 @@ When something unexpected happens, this is the first place to look.
 
 ---
 
-### Tab 9 -- About
+### Tab 10 -- About
 
-![About tab](images/09_about.png)
+![About tab](images/10_about.png)
 
 Credits and a one-paragraph description of the tool. Always accessible, even
 before the maximum current is set.
@@ -656,6 +746,13 @@ experiments/20261015_144649_NiFe_film_FMR/
   plots/s21_colormap.png         S-parameters, refreshed after every point
   plots/s12_colormap.png
   plots/s22_colormap.png
+  plots/s11_colormap_background_subtracted.png
+  plots/s21_colormap_background_subtracted.png
+  plots/s12_colormap_background_subtracted.png
+  plots/s22_colormap_background_subtracted.png
+                                 the same maps with the 0 A background
+                                 subtracted (only once a background has
+                                 been measured)
 ```
 
 **CSV columns** (per-point, combined and background files). One row per
@@ -686,7 +783,7 @@ group named `background`.
 
 | Symptom / message | Likely cause and fix |
 |-------------------|----------------------|
-| Tabs 2-7 are greyed out | The maximum current has not been set. Go to tab 1 and click **Set / Confirm Maximum Current**. |
+| Tabs 2-8 are greyed out | The maximum current has not been set. Go to tab 1 and click **Set / Confirm Maximum Current**. |
 | **Cannot Change Maximum Current** / the limit field is greyed | A process is running or the output is enabled. Abort, **Ramp Current to Zero**, disable the output. |
 | **Connection Failed** | Wrong GPIB address, instrument off, cable/adapter problem, or the wrong **Command profile**. Check `docs/GPIB_ADDRESS_GUIDE.md`; try **Simulation Mode** to confirm the program itself works. |
 | Connects, but nothing responds correctly on real hardware | The **Command profile** is still `GENERIC_PLACEHOLDER`. Choose `AGILENT_E3634A` / `KEYSIGHT_PNA_X_N5242B`, disconnect and reconnect. |
@@ -701,7 +798,9 @@ group named `background`.
 | Color maps say "no data yet" | No field point has been saved in this experiment folder yet. |
 | Plots look empty after switching **Overlay** | Toggling overlay clears the plots; new points will appear as they are measured. |
 | **EMERGENCY STOP ACTIVE** on tab 1 | Restart the application (see [section 6](#6-stopping-aborting-and-emergencies)). |
-| Something odd happened | Read tab 8 (Event Log) or `logs/application.log`. |
+| Background Comparison says "No background (0A) measurement saved" | You ticked **Subtract background** but none exists for this experiment. On tab 7 click **Measure Background (0A)**, then tick the box again. |
+| Background-subtracted color maps are missing from `plots/` | No background has been measured, or its frequency points differ from the sweep's. Measure it with the same VNA settings. |
+| Something odd happened | Read tab 9 (Event Log) or `logs/application.log`. |
 
 ---
 
@@ -720,6 +819,11 @@ group named `background`.
   within 30 s.
 - The maximum current and the voltage threshold are intentionally **not**
   remembered between sessions; coil resistance and margin are.
+- **Background Comparison** (tab 8) shows the experiment of the current
+  session from memory; it cannot open an earlier experiment folder. Its line
+  plots are not exported -- only the background-subtracted color maps are.
+  The background must be measured with the same VNA sweep settings as the
+  sweep, otherwise traces are shown uncorrected.
 
 ---
 
@@ -736,5 +840,6 @@ group named `background`.
 | **Compliance voltage** | The voltage ceiling of a constant-current supply; the supply raises its voltage up to this limit to push the commanded current through the coil. |
 | **OVP / OCP** | The instrument's over-voltage / over-current protection circuits. |
 | **Background** | A measurement taken at 0 A (no applied field), used as a reference. |
+| **Background subtraction** | Subtracting the background's magnitude (dB) from each field point's magnitude (dB) at every frequency, which removes whatever the setup does at zero field and leaves the field-dependent part. |
 | **Hysteresis** | The field produced at a given current depends on whether the current is increasing or decreasing; hence separate increasing/decreasing calibration branches. |
 | **Simulation Mode** | Software-simulated instruments; no hardware is driven. |

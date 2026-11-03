@@ -50,8 +50,8 @@ a { color: #1a4d8f; text-decoration: none; }
 hr { border: 0; border-top: 1px solid #d0d7de; margin: 1.2em 0; }
 code { font: 9pt Consolas, "Courier New", monospace; background: #eff1f4; padding: 0 3px; border-radius: 3px; }
 pre { background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 4px; padding: 8px 10px;
-      white-space: pre-wrap; break-inside: avoid; }
-pre code { background: none; padding: 0; font-size: 8.5pt; line-height: 1.35; }
+      white-space: pre-wrap; break-inside: avoid; font-size: 8.5pt; line-height: 1.3; }
+pre code { background: none; padding: 0; font-size: inherit; line-height: inherit; }
 blockquote { margin: .8em 0; padding: .3em 1em; border-left: 4px solid #1a4d8f; background: #f3f7fc; }
 blockquote p { margin: .35em 0; }
 ul, ol { margin: .4em 0; padding-left: 1.6em; }
@@ -62,6 +62,7 @@ th { background: #eaf0f8; }
 tr { break-inside: avoid; }
 img { max-width: 100%; display: block; margin: .7em auto; border: 1px solid #d0d7de; }
 p:has(> img) { break-inside: avoid; }
+img[src$=".jpg"] { max-width: 72%; }  /* hardware photos: smaller than UI screenshots */
 """
 
 

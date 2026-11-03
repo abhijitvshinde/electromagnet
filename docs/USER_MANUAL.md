@@ -17,9 +17,15 @@ Engineering, North Carolina A&T State University, Greensboro, NC, USA.
 
 1. [What the application does](#1-what-the-application-does)
 2. [Starting the application](#2-starting-the-application)
-3. [Window layout and the tab order](#3-window-layout-and-the-tab-order)
-4. [Quick start: a complete experiment in 10 steps](#4-quick-start-a-complete-experiment-in-10-steps)
-5. [Tab reference](#5-tab-reference)
+3. [Hardware connections](#3-hardware-connections)
+   - [3.1 What connects to what](#31-what-connects-to-what)
+   - [3.2 VNA rear panel](#32-vna-rear-panel-keysight-n5242b)
+   - [3.3 Power supplies and GPIB adapter](#33-power-supplies-and-gpib-adapter)
+   - [3.4 GPIB addresses and application settings](#34-gpib-addresses-and-application-settings)
+   - [3.5 Connection checklist](#35-connection-checklist)
+4. [Window layout and the tab order](#4-window-layout-and-the-tab-order)
+5. [Quick start: a complete experiment in 10 steps](#5-quick-start-a-complete-experiment-in-10-steps)
+6. [Tab reference](#6-tab-reference)
    - [Tab 1 -- Safety](#tab-1----safety)
    - [Tab 2 -- Instrument Connection](#tab-2----instrument-connection)
    - [Tab 3 -- Calibration](#tab-3----calibration)
@@ -30,11 +36,11 @@ Engineering, North Carolina A&T State University, Greensboro, NC, USA.
    - [Tab 8 -- Background Comparison](#tab-8----background-comparison)
    - [Tab 9 -- Event Log](#tab-9----event-log)
    - [Tab 10 -- About](#tab-10----about)
-6. [Stopping, aborting and emergencies](#6-stopping-aborting-and-emergencies)
-7. [Where your data goes](#7-where-your-data-goes)
-8. [Troubleshooting](#8-troubleshooting)
-9. [Known limitations](#9-known-limitations)
-10. [Glossary](#10-glossary)
+7. [Stopping, aborting and emergencies](#7-stopping-aborting-and-emergencies)
+8. [Where your data goes](#8-where-your-data-goes)
+9. [Troubleshooting](#9-troubleshooting)
+10. [Known limitations](#10-known-limitations)
+11. [Glossary](#11-glossary)
 
 ---
 
@@ -75,11 +81,120 @@ double-click it. See `docs/PACKAGING.md` for how it is built.)
 The application starts in **Simulation Mode**: instruments are simulated in
 software, so nothing real is driven. This is the safe way to learn the
 program or to check a sweep before running it on the magnet. To use the real
-hardware, see [Tab 2](#tab-2----instrument-connection).
+hardware, see [Hardware connections](#3-hardware-connections) and
+[Tab 2](#tab-2----instrument-connection).
 
 ---
 
-## 3. Window layout and the tab order
+## 3. Hardware connections
+
+Wire and power the instruments **before** you switch the application from
+Simulation Mode to real hardware. This section shows the rear panels of the
+instruments the application controls and how they connect to the PC.
+
+### 3.1 What connects to what
+
+The PC talks to both instruments over one **GPIB** bus, through a single
+USB-GPIB adapter. Logically:
+
+```
+PC running this application
+ |
+ |  USB
+ |
+NI GPIB-USB-HS adapter
+ |
+ |  GPIB cables -- one shared bus, called GPIB0
+ |
+ +-- Agilent E3634A power supply      (address 3 by default in the app)
+ |      '-- DC current leads --> electromagnet coil
+ |
+ +-- Keysight N5242B VNA              (address 16 by default in the app)
+ |      '-- RF ports 1 and 2 (coax) --> device under test in the magnet gap
+ |
+ '-- Agilent E3631A power supply      (not used by the application)
+```
+
+This is drawn as a tree for clarity. Physically, GPIB cables are
+**daisy-chained** from one instrument to the next, in any order -- the photos
+below show how this rack is wired. The magnetic field itself is read with an
+external gaussmeter during calibration; it is **not** connected to the PC (you
+type the reading into the Calibration tab).
+
+### 3.2 VNA rear panel (Keysight N5242B)
+
+![Rear panel of the Keysight N5242B VNA with numbered callouts](images/hw_vna_rear.jpg)
+
+| # | What it is | Notes |
+|---|------------|-------|
+| **1** (green) | **GPIB (1) TALKER/LISTENER**, with the GPIB cable (Agilent 10833B) plugged in | **This is the port the PC uses.** Keep both thumbscrews tight. |
+| **2** (red) | **GPIB (0) CONTROLLER** -- empty | **Do not use.** This port lets the VNA control *other* instruments; it is not the port for controlling the VNA from a PC. |
+| **3** (blue) | **LAN** port -- empty | No network cable is used; the application talks to the VNA over GPIB only. |
+| **4** (amber) | **AC line power** | 100/120 V (50/60/400 Hz) or 220/240 V (50/60 Hz), 575 W maximum, per the rear-panel label. |
+
+The VNA test ports (port 1 and port 2) are on its front panel; connect them
+to the two ports of your device under test with coax, after doing a 2-port
+calibration on the VNA. Leave the short jumper loops on the rear panel as
+they are.
+
+### 3.3 Power supplies and GPIB adapter
+
+![Rear panels of the two Agilent power supplies and the NI GPIB-USB-HS adapter, with numbered callouts](images/hw_supplies_rear.jpg)
+
+The left unit is the **Agilent E3631A** (not used by the application); the
+right unit is the **Agilent E3634A**, the supply that drives the electromagnet.
+
+| # | What it is | Notes |
+|---|------------|-------|
+| **1** (green) | **NI GPIB-USB-HS** adapter | Its attached black USB cable goes to the PC. Its GPIB connector plugs onto the E3631A's GPIB connector (callout 2). |
+| **2** (blue) | **E3631A GPIB connector** | The adapter and the onward GPIB cable are stacked on this connector, so the bus passes through this instrument. It is on the bus even though the application does not use it, so its address must differ from the others'. |
+| **3** (green) | **E3634A GPIB connector** | A GPIB cable is plugged in here. This is how the PC reaches the magnet supply. |
+| **4** (red) | **E3634A rear OUTPUT terminal block** (+, -, sense) | Nothing is plugged into it in this photo, so the coil's current leads are presumably on the front-panel terminals -- check on the unit. |
+| **5** (amber) | **AC line power** of the E3634A | Set the voltage selector to match your mains supply (100/115/230 V). |
+
+> **Coil leads.** Never connect or disconnect the electromagnet's current leads
+> while the output is enabled -- ramp the current to zero and make sure the
+> output is off first (the coil is a large inductor). Positive current gives
+> one field direction; the E3634A is single-quadrant, so reversing the field
+> needs the leads or an external reversing switch (see
+> [Known limitations](#10-known-limitations)).
+
+### 3.4 GPIB addresses and application settings
+
+| | Power supply | VNA |
+|-|--------------|-----|
+| Instrument | Agilent E3634A | Keysight N5242B |
+| **Command profile** (Tab 2) | `AGILENT_E3634A` | `KEYSIGHT_PNA_X_N5242B` |
+| **GPIB address** (Tab 2), default | `GPIB0::3::INSTR` | `GPIB0::16::INSTR` |
+| Port used on the instrument | GPIB connector (rear) | GPIB (1) TALKER/LISTENER (rear) |
+| Where the address is set | The instrument's own menu | The instrument's own menu |
+
+The number between the `::` must equal the address configured **on the
+instrument**, and every instrument on the bus (including the unused E3631A)
+needs a **different** address. To see what the PC can detect, use NI MAX or the
+command in `docs/GPIB_ADDRESS_GUIDE.md`.
+
+### 3.5 Connection checklist
+
+1. **Power everything off**, then connect the GPIB cables and tighten the
+   thumbscrews. Plug the adapter's USB cable into the PC.
+2. Make sure the VISA/GPIB driver for the adapter is installed on the PC
+   (NI-VISA with NI-488.2 for the NI adapter). After step 3, NI MAX should list
+   the instruments under `GPIB0`.
+3. **Power on the instruments** and wait until the VNA has finished booting
+   (it can take a few minutes).
+4. Check each instrument's GPIB address (table above).
+5. In the application, go to **Tab 2 -- Instrument Connection**: untick
+   **Simulation Mode**, choose the two **Command profiles**, enter the
+   addresses, and click **Connect** for each instrument.
+6. Click **Test Communication** for each. The **IDN** line should name the
+   right model (E3634A for the power supply, N5242B for the VNA). If the two
+   look swapped, the addresses are swapped.
+7. If **Connect** fails, see [Troubleshooting](#9-troubleshooting).
+
+---
+
+## 4. Window layout and the tab order
 
 The window has ten tabs across the top. They are numbered in the order you
 normally use them, left to right:
@@ -104,15 +219,16 @@ Safety, Event Log and About are always available.
 
 ---
 
-## 4. Quick start: a complete experiment in 10 steps
+## 5. Quick start: a complete experiment in 10 steps
 
 Use Simulation Mode first. Each step names the tab.
 
 1. **Safety** -- enter the maximum allowable current (e.g. `2.0` A) and click
    **Set / Confirm Maximum Current**. The other tabs unlock.
 2. **Instrument Connection** -- leave **Simulation Mode** checked (or
-   uncheck it for real hardware) and click **Connect** for the Power Supply
-   and for the VNA.
+   uncheck it for real hardware, after wiring it as in
+   [Hardware connections](#3-hardware-connections)) and click **Connect** for
+   the Power Supply and for the VNA.
 3. **Safety** (again) -- enter the **coil resistance**, click **Calculate
    from Max Current**, then **Set Monitoring Threshold & Compliance
    Voltage**.
@@ -139,7 +255,7 @@ Use Simulation Mode first. Each step names the tab.
 
 ---
 
-## 5. Tab reference
+## 6. Tab reference
 
 ### Tab 1 -- Safety
 
@@ -239,29 +355,8 @@ On connecting the power supply, the app also sends your maximum current as the
 instrument's hardware current limit and re-applies the compliance voltage
 from tab 1 (see above).
 
-#### Physical connections (rear panels)
-
-Both instruments are controlled over **GPIB** from a single USB-GPIB adapter
-on the PC (an **NI GPIB-USB-HS** in this setup), so they share one bus,
-`GPIB0`:
-
-- **Power supply -- Agilent E3634A.** This is the unit the application
-  drives. An Agilent E3631A sits next to it in the rack; the application does
-  not use it, but it is on the same GPIB bus, so its address must differ
-  from the other instruments'.
-- **VNA -- Keysight N5242B (PNA-X).** Plug the GPIB cable into
-  **GPIB (1) TALKER/LISTENER** on the rear panel. Do **not** use
-  **GPIB (0) CONTROLLER**: that port lets the VNA control *other*
-  instruments; it is not the port a PC uses to control the VNA.
-- GPIB cables can be daisy-chained in any order, but every instrument on the
-  bus needs a **unique GPIB address**. Set it from the instrument's own menu;
-  it must match the address typed on this tab (defaults: power supply `3`,
-  VNA `16`).
-- The PC needs the VISA/GPIB driver for the adapter (NI-VISA with NI-488.2
-  for the NI adapter). The instruments should be listed under `GPIB0` in
-  NI MAX -- see `docs/GPIB_ADDRESS_GUIDE.md`.
-- Power both instruments on, and let the VNA finish booting, before you click
-  **Connect**.
+For the physical cabling (which rear-panel connector to use, the GPIB adapter
+and the addresses), see [Hardware connections](#3-hardware-connections).
 
 ---
 
@@ -318,7 +413,7 @@ For when you measure the field yourself with a gaussmeter or probe.
 
 If the instrument's measured current is more than about 10% away from what
 you commanded, a **Current Not Holding** warning appears -- see
-[Troubleshooting](#8-troubleshooting).
+[Troubleshooting](#9-troubleshooting).
 
 > **The current stays applied after Add Point.** It is not ramped back to
 > zero automatically. Click **Ramp Current to Zero** when you are done.
@@ -352,7 +447,7 @@ each one.
 | **Pause / Resume** | Hold and continue the sequence. |
 | **Abort** | Stop the sequence. |
 | **Ramp Current to Zero** | Ramps the supply to 0 A using the ramp step/delay above. |
-| **EMERGENCY STOP** | See [section 6](#6-stopping-aborting-and-emergencies). |
+| **EMERGENCY STOP** | See [section 7](#7-stopping-aborting-and-emergencies). |
 
 When the sequence ends, the program ramps back to 0 A and disables the
 output.
@@ -624,7 +719,7 @@ At the end it ramps to 0 A, disables the output, and shows
 | **Pause** / **Resume** | Hold the sequence at the current point and continue later. The current stays applied while paused. |
 | **Abort** | Stop the sequence now. The program ramps to zero, disables the output, and keeps all data measured so far. |
 | **Ramp to Zero** | Ramp the supply to 0 A using the ramp step/delay above (e.g. after a pause). |
-| **EMERGENCY STOP** | See [section 6](#6-stopping-aborting-and-emergencies). |
+| **EMERGENCY STOP** | See [section 7](#7-stopping-aborting-and-emergencies). |
 
 ---
 
@@ -697,7 +792,7 @@ before the maximum current is set.
 
 ---
 
-## 6. Stopping, aborting and emergencies
+## 7. Stopping, aborting and emergencies
 
 | Situation | Use | What happens |
 |-----------|-----|--------------|
@@ -722,7 +817,7 @@ instrument manually.
 
 ---
 
-## 7. Where your data goes
+## 8. Where your data goes
 
 Each experiment gets its own folder under the output folder:
 
@@ -779,13 +874,13 @@ group named `background`.
 
 ---
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
 | Symptom / message | Likely cause and fix |
 |-------------------|----------------------|
 | Tabs 2-8 are greyed out | The maximum current has not been set. Go to tab 1 and click **Set / Confirm Maximum Current**. |
 | **Cannot Change Maximum Current** / the limit field is greyed | A process is running or the output is enabled. Abort, **Ramp Current to Zero**, disable the output. |
-| **Connection Failed** | Wrong GPIB address, instrument off, cable/adapter problem, or the wrong **Command profile**. Check `docs/GPIB_ADDRESS_GUIDE.md`; try **Simulation Mode** to confirm the program itself works. |
+| **Connection Failed** | Wrong GPIB address, instrument off (or the VNA still booting), cable/adapter problem, the VNA cable in **GPIB (0) CONTROLLER** instead of **GPIB (1) TALKER/LISTENER**, or the wrong **Command profile**. See [Hardware connections](#3-hardware-connections) and `docs/GPIB_ADDRESS_GUIDE.md`; try **Simulation Mode** to confirm the program itself works. |
 | Connects, but nothing responds correctly on real hardware | The **Command profile** is still `GENERIC_PLACEHOLDER`. Choose `AGILENT_E3634A` / `KEYSIGHT_PNA_X_N5242B`, disconnect and reconnect. |
 | **Invalid Voltage Value** (0 V) | Coil resistance is 0 or no maximum current is set. Fix, click **Calculate from Max Current**, then set again. |
 | **Current Not Holding** | The commanded current is not appearing at the instrument. Usually a protection trip (OVP/OCP) or too-low compliance voltage. Click **Clear Protection Trip** on tab 2, and re-click **Set Monitoring Threshold & Compliance Voltage** on tab 1 with the supply connected. Use smaller ramp steps. |
@@ -797,14 +892,14 @@ group named `background`.
 | **No experiment folder created** | Tab 6 -> **Create Experiment Folder**. |
 | Color maps say "no data yet" | No field point has been saved in this experiment folder yet. |
 | Plots look empty after switching **Overlay** | Toggling overlay clears the plots; new points will appear as they are measured. |
-| **EMERGENCY STOP ACTIVE** on tab 1 | Restart the application (see [section 6](#6-stopping-aborting-and-emergencies)). |
+| **EMERGENCY STOP ACTIVE** on tab 1 | Restart the application (see [section 7](#7-stopping-aborting-and-emergencies)). |
 | Background Comparison says "No background (0A) measurement saved" | You ticked **Subtract background** but none exists for this experiment. On tab 7 click **Measure Background (0A)**, then tick the box again. |
 | Background-subtracted color maps are missing from `plots/` | No background has been measured, or its frequency points differ from the sweep's. Measure it with the same VNA settings. |
 | Something odd happened | Read tab 9 (Event Log) or `logs/application.log`. |
 
 ---
 
-## 9. Known limitations
+## 10. Known limitations
 
 - **"Measurements per field (averaged)" on the Field Sweep tab is not yet
   used** by the measurement code -- changing it has no effect. Use the VNA's
@@ -827,7 +922,7 @@ group named `background`.
 
 ---
 
-## 10. Glossary
+## 11. Glossary
 
 | Term | Meaning |
 |------|---------|
